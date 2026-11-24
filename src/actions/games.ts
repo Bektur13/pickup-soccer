@@ -30,6 +30,7 @@ import type { ActionHandler, ActionResult, ActionTools } from 'deepspace/worker'
 import type { Env } from '../../worker'
 import type { Game } from '../lib/games'
 import { registrationId } from '../schemas/registrations-schema'
+import { addChatMember, removeChatMember } from './chat'
 
 interface Registration extends Record<string, unknown> {
   gameId: string
@@ -148,6 +149,10 @@ export const joinGame: ActionHandler<Env> = async ({ userId, params, tools }) =>
       regId,
     )
     if (created.success) {
+      // Chat access for the new player. A separate write: if it fails, the
+      // join still stands and ensureChatAccess repairs it when chat opens.
+      const member = await addChatMember(tools, gameId, userId)
+      if (!member.success) console.error(`[games] chat membership for ${gameId}/${userId}: ${member.error}`)
       const playerCount = await syncGameCounts(tools, gameId)
       return { success: true, data: { joined: true, alreadyJoined: false, playerCount } }
     }
@@ -180,6 +185,15 @@ export const leaveGame: ActionHandler<Env> = async ({ userId, params, tools }) =
   if (!removed.success) {
     console.error(`[games] leave ${gameId} by ${userId} failed: ${removed.error}`)
     return fail('Could not leave the game', 'error')
+  }
+
+  // Leaving also ends chat access — except for the organizer, who keeps it.
+  const isOrganizer = gameRes.success && gameRes.data.record.data.organizerId === userId
+  if (!isOrganizer) {
+    const member = await removeChatMember(tools, gameId, userId)
+    if (!member.success && member.error !== 'Record not found') {
+      console.error(`[games] chat membership removal for ${gameId}/${userId}: ${member.error}`)
+    }
   }
 
   const playerCount = gameRes.success ? await syncGameCounts(tools, gameId) : null
