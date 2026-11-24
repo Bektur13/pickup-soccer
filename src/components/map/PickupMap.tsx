@@ -1,32 +1,87 @@
 /**
  * PickupMap — a MapLibre GL canvas that fills its parent, with a floating
- * control stack (zoom in/out, recenter on Bellevue).
+ * control stack (zoom in/out, recenter on Bellevue) and game pins.
  *
  * The map instance is created once on mount and disposed on unmount; React
- * never re-renders the canvas. Give the parent a size (e.g. `h-full w-full`).
+ * never re-renders the canvas. Pins are a GeoJSON source + circle layer whose
+ * data is replaced whenever `pins`/`selectedId` change. Give the parent a size
+ * (e.g. `h-full w-full`).
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import maplibregl from 'maplibre-gl'
-import type { Map as MlMap } from 'maplibre-gl'
+import type { GeoJSONSource, Map as MlMap } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { Loader2, LocateFixed, Minus, Plus } from 'lucide-react'
 import { DEFAULT_CENTER, DEFAULT_ZOOM, MAP_STYLE_URL } from '@/lib/map-config'
 import { cn } from '@/lib/utils'
 
+const PINS_SOURCE = 'game-pins'
+const PINS_LAYER = 'game-pins'
+
+const COLOR_OPEN = '#16a34a' // green: spots left
+const COLOR_FULL = '#9ca3af' // gray: full (CLAUDE.md "gray pin when full")
+const COLOR_SELECTED_RING = '#0a0a0a'
+
+export interface MapPin {
+  id: string
+  lat: number
+  lng: number
+  full: boolean
+}
+
+export interface PickupMapHandle {
+  flyTo(lat: number, lng: number): void
+}
+
 interface PickupMapProps {
   className?: string
+  pins?: MapPin[]
+  selectedId?: string | null
+  /** A pin was clicked (its id), or empty map was clicked (null). */
+  onSelectPin?: (id: string | null) => void
   /** Fires once the style has loaded, with the live map instance. */
   onReady?: (map: MlMap) => void
 }
 
-export function PickupMap({ className, onReady }: PickupMapProps) {
+function pinsGeoJSON(pins: MapPin[], selectedId: string | null | undefined) {
+  return {
+    type: 'FeatureCollection' as const,
+    features: pins.map((p) => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
+      properties: { id: p.id, full: p.full, selected: p.id === selectedId },
+    })),
+  }
+}
+
+export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function PickupMap(
+  { className, pins = [], selectedId, onSelectPin, onReady },
+  ref,
+) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MlMap | null>(null)
   const [ready, setReady] = useState(false)
-  // Latest callback without re-running the init effect.
+  // Latest callbacks without re-running the init effect.
   const onReadyRef = useRef(onReady)
   onReadyRef.current = onReady
+  const onSelectRef = useRef(onSelectPin)
+  onSelectRef.current = onSelectPin
+
+  useImperativeHandle(ref, () => ({
+    flyTo(lat, lng) {
+      const map = mapRef.current
+      if (!map) return
+      map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 14) })
+    },
+  }))
 
   // ── Map init (once) ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -42,6 +97,32 @@ export function PickupMap({ className, onReady }: PickupMapProps) {
     mapRef.current = map
 
     map.on('load', () => {
+      map.addSource(PINS_SOURCE, { type: 'geojson', data: pinsGeoJSON([], null) })
+      map.addLayer({
+        id: PINS_LAYER,
+        type: 'circle',
+        source: PINS_SOURCE,
+        paint: {
+          'circle-radius': ['case', ['get', 'selected'], 11, 8],
+          'circle-color': ['case', ['get', 'full'], COLOR_FULL, COLOR_OPEN],
+          'circle-stroke-width': ['case', ['get', 'selected'], 3, 2],
+          'circle-stroke-color': ['case', ['get', 'selected'], COLOR_SELECTED_RING, '#ffffff'],
+        },
+      })
+
+      // Click a pin → select it; click empty map → clear the selection.
+      map.on('click', (e) => {
+        const hit = map.queryRenderedFeatures(e.point, { layers: [PINS_LAYER] })[0]
+        const id = hit?.properties?.id
+        onSelectRef.current?.(typeof id === 'string' ? id : null)
+      })
+      map.on('mouseenter', PINS_LAYER, () => {
+        map.getCanvas().style.cursor = 'pointer'
+      })
+      map.on('mouseleave', PINS_LAYER, () => {
+        map.getCanvas().style.cursor = ''
+      })
+
       // The container may have been laid out after construction (flex parent).
       map.resize()
       setReady(true)
@@ -53,6 +134,13 @@ export function PickupMap({ className, onReady }: PickupMapProps) {
       mapRef.current = null
     }
   }, [])
+
+  // ── Pins: push the latest data into the source ───────────────────────────
+  useEffect(() => {
+    if (!ready) return
+    const source = mapRef.current?.getSource(PINS_SOURCE) as GeoJSONSource | undefined
+    source?.setData(pinsGeoJSON(pins, selectedId))
+  }, [ready, pins, selectedId])
 
   const recenter = () =>
     mapRef.current?.flyTo({
@@ -91,7 +179,7 @@ export function PickupMap({ className, onReady }: PickupMapProps) {
       </div>
     </div>
   )
-}
+})
 
 function CtrlButton({
   label,
