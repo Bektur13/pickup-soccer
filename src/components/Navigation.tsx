@@ -84,7 +84,7 @@ export default function Navigation() {
                Sign in button (that would offer sign-in to a signed-in user). */
             <div className="flex items-center gap-2 rounded-full border border-border bg-card/60 py-1 pl-1 pr-2.5">
               <div className="h-6 w-6 animate-pulse rounded-full bg-muted" />
-              <div className="hidden h-4 w-20 animate-pulse rounded-md bg-muted sm:block" />
+              <div className="h-4 w-16 animate-pulse rounded-md bg-muted sm:w-20" />
             </div>
           ) : isSignedIn && user ? (
             <DropdownMenu>
@@ -102,7 +102,7 @@ export default function Navigation() {
                     </Avatar>
                     <span
                       data-testid="nav-user-name"
-                      className="hidden max-w-[140px] truncate text-foreground sm:inline"
+                      className="max-w-[96px] truncate text-foreground sm:max-w-[160px]"
                     >
                       {user.name || user.email}
                     </span>
@@ -159,7 +159,11 @@ export default function Navigation() {
         )}
       </nav>
 
-      {showAuthModal && <AuthOverlay onClose={() => setShowAuthModal(false)} />}
+      {/* Google is the only OAuth button; the SDK always adds email/password
+          below it (sign-in only — used by @deepspace.test test accounts). */}
+      {showAuthModal && (
+        <AuthOverlay providers={['google']} onClose={() => setShowAuthModal(false)} />
+      )}
     </>
   )
 }
