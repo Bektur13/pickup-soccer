@@ -25,6 +25,9 @@ import { cn } from '@/lib/utils'
 
 const PINS_SOURCE = 'game-pins'
 const PINS_LAYER = 'game-pins'
+const DRAFT_SOURCE = 'draft-pin'
+const DRAFT_LAYER = 'draft-pin'
+const COLOR_DRAFT = '#f97316' // orange: the field being chosen for a new game
 
 const COLOR_OPEN = '#16a34a' // green: spots left
 const COLOR_FULL = '#9ca3af' // gray: full (CLAUDE.md "gray pin when full")
@@ -47,6 +50,11 @@ interface PickupMapProps {
   selectedId?: string | null
   /** A pin was clicked (its id), or empty map was clicked (null). */
   onSelectPin?: (id: string | null) => void
+  /** "Drop a pin" mode: map clicks call onPick instead of selecting games. */
+  pickMode?: boolean
+  onPick?: (at: { lat: number; lng: number }) => void
+  /** The location chosen for a new game, shown as an orange pin. */
+  draftPin?: { lat: number; lng: number } | null
   /** Fires once the style has loaded, with the live map instance. */
   onReady?: (map: MlMap) => void
 }
@@ -63,7 +71,7 @@ function pinsGeoJSON(pins: MapPin[], selectedId: string | null | undefined) {
 }
 
 export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function PickupMap(
-  { className, pins = [], selectedId, onSelectPin, onReady },
+  { className, pins = [], selectedId, onSelectPin, pickMode = false, onPick, draftPin = null, onReady },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -74,6 +82,8 @@ export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function Pi
   onReadyRef.current = onReady
   const onSelectRef = useRef(onSelectPin)
   onSelectRef.current = onSelectPin
+  const pickRef = useRef({ pickMode, onPick })
+  pickRef.current = { pickMode, onPick }
 
   useImperativeHandle(ref, () => ({
     flyTo(lat, lng) {
@@ -110,17 +120,35 @@ export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function Pi
         },
       })
 
-      // Click a pin → select it; click empty map → clear the selection.
+      map.addSource(DRAFT_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      map.addLayer({
+        id: DRAFT_LAYER,
+        type: 'circle',
+        source: DRAFT_SOURCE,
+        paint: {
+          'circle-radius': 10,
+          'circle-color': COLOR_DRAFT,
+          'circle-stroke-width': 3,
+          'circle-stroke-color': '#ffffff',
+        },
+      })
+
+      // Pick mode → report the point. Otherwise: click a pin → select it;
+      // click empty map → clear the selection.
       map.on('click', (e) => {
+        if (pickRef.current.pickMode) {
+          pickRef.current.onPick?.({ lat: e.lngLat.lat, lng: e.lngLat.lng })
+          return
+        }
         const hit = map.queryRenderedFeatures(e.point, { layers: [PINS_LAYER] })[0]
         const id = hit?.properties?.id
         onSelectRef.current?.(typeof id === 'string' ? id : null)
       })
       map.on('mouseenter', PINS_LAYER, () => {
-        map.getCanvas().style.cursor = 'pointer'
+        if (!pickRef.current.pickMode) map.getCanvas().style.cursor = 'pointer'
       })
       map.on('mouseleave', PINS_LAYER, () => {
-        map.getCanvas().style.cursor = ''
+        if (!pickRef.current.pickMode) map.getCanvas().style.cursor = ''
       })
 
       // The container may have been laid out after construction (flex parent).
@@ -141,6 +169,25 @@ export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function Pi
     const source = mapRef.current?.getSource(PINS_SOURCE) as GeoJSONSource | undefined
     source?.setData(pinsGeoJSON(pins, selectedId))
   }, [ready, pins, selectedId])
+
+  // ── Draft pin + pick-mode cursor ─────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!ready || !map) return
+    const source = map.getSource(DRAFT_SOURCE) as GeoJSONSource | undefined
+    source?.setData({
+      type: 'FeatureCollection',
+      features: draftPin
+        ? [{ type: 'Feature', geometry: { type: 'Point', coordinates: [draftPin.lng, draftPin.lat] }, properties: {} }]
+        : [],
+    })
+  }, [ready, draftPin])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!ready || !map) return
+    map.getCanvas().style.cursor = pickMode ? 'crosshair' : ''
+  }, [ready, pickMode])
 
   const recenter = () =>
     mapRef.current?.flyTo({

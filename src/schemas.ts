@@ -14,7 +14,7 @@ import { gamesSchema } from './schemas/games-schema'
 import { registrationsSchema } from './schemas/registrations-schema'
 import { gameMessagesSchema, teamMembersSchema } from './schemas/chat-schema'
 import { remindersSentSchema } from './schemas/reminders-schema'
-import { weatherCacheSchema } from './schemas/weather-cache-schema'
+import { placeCacheSchema, weatherCacheSchema } from './schemas/cache-schemas'
 
 export const schemas: CollectionSchema[] = [
   usersSchema,
@@ -25,4 +25,5 @@ export const schemas: CollectionSchema[] = [
   gameMessagesSchema,
   remindersSentSchema,
   weatherCacheSchema,
+  placeCacheSchema,
 ]

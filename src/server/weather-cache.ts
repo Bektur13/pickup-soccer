@@ -1,29 +1,23 @@
 /**
- * The 1-hour weather cache, stored in the app's RecordRoom (`weather_cache`
- * collection) instead of KV — KV needs an admin DeepSpace account.
+ * A small TTL cache stored in the app's RecordRoom — one server-only
+ * collection per use (`weather_cache`, `place_cache`; src/schemas/cache-schemas.ts).
+ * Used instead of KV, which needs an admin DeepSpace account.
  *
- * Implements the WeatherCache interface from ./weather, so the forecast logic
- * is unchanged: get() returns null once a row is older than its TTL, and put()
- * overwrites the row (records.create with a recordId upserts —
- * node_modules/deepspace/dist/worker.d.ts ActionTools.create).
- *
- * Reads/writes go through the RecordRoom's internal tools endpoint as the app
- * (X-App-Action), the same call the scaffold uses in realtime-routes.ts.
+ * get() returns null once a row is past its TTL; put() overwrites the row
+ * (records.create with a recordId upserts — node_modules/deepspace/dist/
+ * worker.d.ts ActionTools.create). Matches the WeatherCache interface.
  */
 
 import type { WeatherCache } from './weather'
+import type { ExecTool } from './record-room'
 
-export type ExecTool = (
-  tool: string,
-  params: Record<string, unknown>,
-) => Promise<{ success?: boolean; error?: string; data?: unknown }>
+export type { ExecTool }
+export type TtlCache = WeatherCache
 
-const COLLECTION = 'weather_cache'
-
-export function recordRoomWeatherCache(exec: ExecTool, now: () => number = Date.now): WeatherCache {
+export function recordRoomCache(exec: ExecTool, collection: string, now: () => number = Date.now): TtlCache {
   return {
     async get(key) {
-      const res = await exec('records.get', { collection: COLLECTION, recordId: key })
+      const res = await exec('records.get', { collection, recordId: key })
       const row = res.success
         ? (res.data as { record?: { data?: { payload?: string; expiresAt?: number } } })?.record?.data
         : undefined
@@ -32,11 +26,16 @@ export function recordRoomWeatherCache(exec: ExecTool, now: () => number = Date.
     },
     async put(key, value, { expirationTtl }) {
       const res = await exec('records.create', {
-        collection: COLLECTION,
+        collection,
         recordId: key,
         data: { payload: value, expiresAt: now() + expirationTtl * 1000 },
       })
-      if (!res.success) throw new Error(`weather_cache write failed: ${res.error}`)
+      if (!res.success) throw new Error(`${collection} write failed: ${res.error}`)
     },
   }
+}
+
+/** The 1-hour weather cache (`weather_cache`). */
+export function recordRoomWeatherCache(exec: ExecTool, now: () => number = Date.now): TtlCache {
+  return recordRoomCache(exec, 'weather_cache', now)
 }

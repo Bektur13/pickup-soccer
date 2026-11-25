@@ -4,27 +4,35 @@
  * °F and chance of rain; games more than 16 days out show "Forecast not
  * available yet". Body: field, time, skill, surface, cost, organizer, spots.
  *
- * Join/Leave, the roster and the chat pop-up are added in the next step.
+ * Below that: the live roster (registrations), the Join / Leave / Full button
+ * (server actions joinGame/leaveGame — race-safe, src/actions/games.ts), and
+ * the chat pop-up for registered players and the organizer.
  */
 
-import type { ComponentType, ReactNode } from 'react'
-import type { RecordData } from 'deepspace'
+import { useState, type ComponentType, type ReactNode } from 'react'
+import { AuthOverlay, useAuth, useQuery, type RecordData } from 'deepspace'
 import {
   CalendarClock,
   Cloud,
   CloudOff,
   CloudRain,
   Clock,
+  Crown,
   DollarSign,
   Gauge,
   Layers,
+  Loader2,
   MapPin,
+  MessageCircle,
   Snowflake,
   Sun,
   User,
+  Users,
   X,
 } from 'lucide-react'
-import { Badge, cn } from '@/components/ui'
+import { Badge, Button, cn, useToast } from '@/components/ui'
+import { callAction } from '@/lib/api'
+import { GameChat } from './GameChat'
 import { formatKickoff, type Game } from '@/lib/games'
 import { describeWeatherCode, type WeatherTheme } from '@/lib/weather'
 import { useGameWeather, type GameWeatherState } from '@/hooks/useGameWeather'
@@ -133,6 +141,136 @@ function Detail({ icon: Icon, children }: { icon: IconType; children: ReactNode 
   )
 }
 
+interface Registration {
+  gameId: string
+  userId: string
+  userName?: string
+  slot: number
+}
+
+/** Join / Leave / Full / Sign in — plus the Chat button for members. */
+function GameActions({
+  game,
+  isRegistered,
+  onJoined,
+  onOpenChat,
+}: {
+  game: RecordData<Game>
+  isRegistered: boolean
+  onJoined: () => void
+  onOpenChat: () => void
+}) {
+  const g = game.data
+  const { isSignedIn, userId } = useAuth()
+  const { success, error } = useToast()
+  const [busy, setBusy] = useState<'join' | 'leave' | null>(null)
+  const [showSignIn, setShowSignIn] = useState(false)
+
+  const isOrganizer = !!userId && userId === g.organizerId
+  const started = Date.parse(g.startsAt) <= Date.now()
+  const closed = g.status === 'cancelled' || g.status === 'past'
+
+  async function join() {
+    setBusy('join')
+    const r = await callAction<{ alreadyJoined?: boolean }>('joinGame', { gameId: game.recordId })
+    setBusy(null)
+    if (r.success) {
+      success(r.data.alreadyJoined ? 'You’re already in' : 'You’re in!', 'Say hi to the team in the chat.')
+      onJoined()
+    } else {
+      error('Could not join', r.error)
+    }
+  }
+
+  async function leave() {
+    setBusy('leave')
+    const r = await callAction('leaveGame', { gameId: game.recordId })
+    setBusy(null)
+    if (r.success) success('You left the game')
+    else error('Could not leave', r.error)
+  }
+
+  let primary: ReactNode
+  if (!isSignedIn) {
+    primary = (
+      <Button className="flex-1" onClick={() => setShowSignIn(true)} data-testid="game-signin-to-join">
+        Sign in to join
+      </Button>
+    )
+  } else if (isRegistered) {
+    primary = (
+      <Button
+        variant="outline"
+        className="flex-1"
+        onClick={leave}
+        disabled={busy !== null || started || closed}
+        data-testid="game-leave"
+      >
+        {busy === 'leave' && <Loader2 className="animate-spin" aria-hidden />}
+        Leave game
+      </Button>
+    )
+  } else if (closed || started) {
+    primary = (
+      <Button className="flex-1" disabled>
+        {g.status === 'cancelled' ? 'Cancelled' : 'Kicked off'}
+      </Button>
+    )
+  } else if (g.status === 'full') {
+    primary = (
+      <Button className="flex-1" disabled data-testid="game-full">
+        Full
+      </Button>
+    )
+  } else {
+    primary = (
+      <Button className="flex-1" onClick={join} disabled={busy !== null} data-testid="game-join">
+        {busy === 'join' && <Loader2 className="animate-spin" aria-hidden />}
+        Join game
+      </Button>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {primary}
+      {isSignedIn && (isRegistered || isOrganizer) && (
+        <Button variant="secondary" onClick={onOpenChat} data-testid="game-open-chat">
+          <MessageCircle aria-hidden /> Chat
+        </Button>
+      )}
+      {showSignIn && <AuthOverlay providers={['google']} onClose={() => setShowSignIn(false)} />}
+    </div>
+  )
+}
+
+function Roster({ players, organizerId, loading }: { players: RecordData<Registration>[]; organizerId: string; loading: boolean }) {
+  return (
+    <div className="space-y-2" data-testid="game-roster">
+      <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <Users className="h-3.5 w-3.5" aria-hidden /> Players
+      </h3>
+      {loading ? (
+        <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+      ) : players.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No one yet — be the first.</p>
+      ) : (
+        <ul className="flex flex-wrap gap-1.5">
+          {players.map((p) => (
+            <li
+              key={p.recordId}
+              className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs text-secondary-foreground"
+            >
+              {p.data.userId === organizerId && <Crown className="h-3 w-3 text-amber-500" aria-label="Organizer" />}
+              {p.data.userName || 'Player'}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 interface GameCardProps {
   game: RecordData<Game>
   onClose: () => void
@@ -147,7 +285,19 @@ export function GameCard({ game, onClose }: GameCardProps) {
   const spotsTaken = g.playerCount ?? 0
   const spotsLeft = Math.max(0, g.maxPlayers - spotsTaken)
 
+  // Live roster: registrations are readable by everyone (names only).
+  const { userId } = useAuth()
+  const roster = useQuery<Registration>('registrations', {
+    where: { gameId: game.recordId },
+    orderBy: 'createdAt',
+    orderDir: 'asc',
+  })
+  const isRegistered = !!userId && roster.records.some((r) => r.data.userId === userId)
+  const [chatOpen, setChatOpen] = useState(false)
+
   return (
+    <>
+    {chatOpen && <GameChat gameId={game.recordId} title={g.title} onClose={() => setChatOpen(false)} />}
     <section
       data-testid="game-card"
       aria-label={`Game: ${g.title}`}
@@ -214,7 +364,19 @@ export function GameCard({ game, onClose }: GameCardProps) {
         </div>
 
         {g.notes && <p className="whitespace-pre-line text-sm text-muted-foreground">{g.notes}</p>}
+
+        <Roster players={roster.records} organizerId={g.organizerId} loading={roster.status === 'loading'} />
+      </div>
+
+      <div className="border-t border-border px-5 py-3">
+        <GameActions
+          game={game}
+          isRegistered={isRegistered}
+          onJoined={() => setChatOpen(true)}
+          onOpenChat={() => setChatOpen(true)}
+        />
       </div>
     </section>
+    </>
   )
 }
