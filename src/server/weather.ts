@@ -1,8 +1,8 @@
 /**
  * Game forecast from Open-Meteo (free, no API key — CLAUDE.md stack), called
  * from the worker only (CLAUDE.md rule 4) and cached for 1 hour in the app's
- * KV namespace (wrangler.toml `WEATHER_CACHE`, provisioned by DeepSpace:
- * https://docs.deep.space/guides/custom-bindings).
+ * RecordRoom (`weather_cache` collection, src/server/weather-cache.ts). Not KV:
+ * custom Cloudflare bindings need an admin DeepSpace account (free tier refuses).
  *
  * One Open-Meteo call fetches the whole 16-day hourly forecast for a location;
  * it's cached under the location rounded to ~1 km, so every game at the same
@@ -14,13 +14,13 @@
 import { FORECAST_HORIZON_DAYS, themeForWeatherCode, type GameWeather } from '../lib/weather'
 
 export const OPEN_METEO_URL = 'https://api.open-meteo.com/v1/forecast'
-/** KV expirationTtl — the "1 hour cycle". */
+/** Cache lifetime — the "1 hour cycle". */
 export const WEATHER_CACHE_TTL_SECONDS = 3600
 const FETCH_TIMEOUT_MS = 8000
 const DAY_MS = 86_400_000
 const USER_AGENT = 'pickup-soccer/1.0 (+https://pickup-soccer.app.space)'
 
-/** The subset of KVNamespace we use (so tests can pass a fake). */
+/** The cache we need (KV-shaped; implemented over the RecordRoom in weather-cache.ts). */
 export interface WeatherCache {
   get(key: string, type: 'json'): Promise<unknown>
   put(key: string, value: string, options: { expirationTtl: number }): Promise<void>

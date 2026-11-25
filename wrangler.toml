@@ -56,13 +56,6 @@ bindings = [
 # database_name = "my-app-db"
 # database_id = "auto"
 #
-# Weather forecast cache (src/server/weather.ts): Open-Meteo responses kept
-# for 1 hour via KV expirationTtl. "auto" = DeepSpace provisions it on deploy.
-[[kv_namespaces]]
-binding = "WEATHER_CACHE"
-id = "auto"
-title = "pickup-soccer-weather"
-
 # One managed knowledge base per app — upload documents, then search them with
 # `knowledge(env)` from deepspace/worker. The instance is never exposed on env;
 # the binding name is only the provisioning key:

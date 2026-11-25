@@ -85,8 +85,6 @@ export class AppJobRoom extends JobRoom<Env> {
 
 export interface Env extends DOBindings<typeof __DO_MANIFEST__> {
   ASSETS: Fetcher
-  /** KV cache for Open-Meteo forecasts (wrangler.toml, id = "auto"). */
-  WEATHER_CACHE: KVNamespace
   /** DeepSpace secret (`npx deepspace secrets set RESEND_API_KEY=…`). Unset → emails are skipped and logged. */
   RESEND_API_KEY?: string
   /** Optional DeepSpace secret: sender, e.g. "Pickup Soccer <games@yourdomain.com>". */
