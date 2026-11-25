@@ -312,8 +312,9 @@ export function GameCard({ game, onClose }: GameCardProps) {
       className={cn(
         'absolute z-20 flex flex-col overflow-hidden rounded-2xl border-2 bg-card shadow-2xl',
         // phones: sheet over the list; md+: right column, clear of the map controls
-        // phones: sheet at the bottom; md+: right column, below the search bar, clear of the map controls
-        'inset-x-3 bottom-3 max-h-[75%] md:inset-x-auto md:bottom-auto md:right-16 md:top-[4.25rem] md:max-h-[calc(100%-5rem)] md:w-96',
+        // phones: sheet at the bottom; md+: left column under the nav pill
+        // (the right column holds account, search, Create game, controls)
+        'inset-x-2 bottom-2 max-h-[75%] md:inset-x-auto md:bottom-auto md:left-2 md:top-12 md:max-h-[calc(100%-3.5rem)] md:w-96',
         theme?.accent ?? 'border-border',
       )}
     >

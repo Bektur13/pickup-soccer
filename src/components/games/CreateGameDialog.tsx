@@ -195,7 +195,7 @@ export function CreateGameDialog({
       className={cn(
         'absolute z-30 flex flex-col overflow-hidden border border-border bg-card shadow-2xl',
         // phones: bottom sheet (map stays clickable above it); md+: left column
-        'inset-x-0 bottom-0 max-h-[70%] rounded-t-2xl md:inset-x-auto md:bottom-3 md:left-3 md:top-3 md:max-h-none md:w-[26rem] md:rounded-2xl',
+        'inset-x-0 bottom-0 max-h-[70%] rounded-t-2xl md:inset-x-auto md:bottom-2 md:left-2 md:top-12 md:max-h-none md:w-[26rem] md:rounded-2xl',
       )}
     >
       <header className="flex items-center justify-between border-b border-border px-5 py-3">

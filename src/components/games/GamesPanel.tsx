@@ -36,9 +36,9 @@ export function GamesPanel({ games, status, selectedId, onSelect, className }: G
     <aside
       data-testid="games-panel"
       className={cn(
-        'pointer-events-auto absolute bottom-4 left-1/2 z-10 -translate-x-1/2',
+        'pointer-events-auto absolute bottom-2 left-1/2 z-10 -translate-x-1/2',
         'flex flex-col overflow-hidden rounded-2xl border border-border bg-card/85 shadow-xl backdrop-blur-md',
-        expanded ? 'w-[min(26rem,calc(100%-1.5rem))]' : 'w-auto',
+        expanded ? 'w-[min(26rem,calc(100%-1rem))]' : 'w-auto',
         className,
       )}
     >

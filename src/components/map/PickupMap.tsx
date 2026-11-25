@@ -3,8 +3,9 @@
  * control stack (zoom in/out, recenter on Bellevue) and game pins.
  *
  * The map instance is created once on mount and disposed on unmount; React
- * never re-renders the canvas. Pins are a GeoJSON source + circle layer whose
- * data is replaced whenever `pins`/`selectedId` change. Give the parent a size
+ * never re-renders the canvas. Game pins are small floating label cards —
+ * one maplibregl.Marker (HTML element) per game, kept in sync by id whenever
+ * `pins`/`selectedId` change (styles in game-pin.css). Give the parent a size
  * (e.g. `h-full w-full`).
  */
 
@@ -19,12 +20,11 @@ import {
 import maplibregl from 'maplibre-gl'
 import type { GeoJSONSource, Map as MlMap } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import './game-pin.css'
 import { Loader2, LocateFixed, Minus, Plus } from 'lucide-react'
 import { DEFAULT_CENTER, DEFAULT_ZOOM, MAP_STYLE_URL } from '@/lib/map-config'
 import { cn } from '@/lib/utils'
 
-const PINS_SOURCE = 'game-pins'
-const PINS_LAYER = 'game-pins'
 const DRAFT_SOURCE = 'draft-pin'
 const DRAFT_LAYER = 'draft-pin'
 const COLOR_DRAFT = '#f97316' // orange: the field being chosen for a new game
@@ -32,15 +32,76 @@ const SEARCH_SOURCE = 'search-pin'
 const SEARCH_LAYER = 'search-pin'
 const COLOR_SEARCH = '#2563eb' // blue: the place found with the search bar
 
-const COLOR_OPEN = '#16a34a' // green: spots left
-const COLOR_FULL = '#9ca3af' // gray: full (CLAUDE.md "gray pin when full")
-const COLOR_SELECTED_RING = '#0a0a0a'
-
 export interface MapPin {
   id: string
   lat: number
   lng: number
+  /** Grey pin when full (CLAUDE.md). */
   full: boolean
+  /** Card text, e.g. "Saturday 7v7" / "Sat 6:00 PM · 6/14". */
+  title: string
+  meta: string
+}
+
+/** One game's marker: the element MapLibre positions, plus the parts we update. */
+interface PinMarker {
+  marker: maplibregl.Marker
+  root: HTMLDivElement
+  card: HTMLButtonElement
+  title: HTMLSpanElement
+  meta: HTMLSpanElement
+}
+
+/**
+ * Build a pin's DOM. Text goes in via textContent (titles are user input —
+ * never innerHTML). Clicks stop here so they don't also count as a map click.
+ */
+function createPinElement(onClick: () => void): Omit<PinMarker, 'marker'> {
+  const root = document.createElement('div')
+  root.className = 'gp-pin'
+  const body = document.createElement('div')
+  body.className = 'gp-pin__body'
+  // Different float phase per pin so they don't bob in lockstep.
+  body.style.animationDelay = `-${(Math.random() * 3.2).toFixed(2)}s`
+
+  const card = document.createElement('button')
+  card.type = 'button'
+  card.className = 'gp-pin__card'
+  card.dataset.testid = 'game-pin'
+  const ball = document.createElement('span')
+  ball.className = 'gp-pin__ball'
+  ball.textContent = '⚽'
+  ball.setAttribute('aria-hidden', 'true')
+  const text = document.createElement('span')
+  text.className = 'gp-pin__text'
+  const title = document.createElement('span')
+  title.className = 'gp-pin__title'
+  const meta = document.createElement('span')
+  meta.className = 'gp-pin__meta'
+  // appendChild, not append(): the worker types loaded by tsconfig replace the
+  // DOM's append(...nodes) signature with HTMLRewriter's.
+  text.appendChild(title)
+  text.appendChild(meta)
+  card.appendChild(ball)
+  card.appendChild(text)
+
+  const tail = document.createElement('span')
+  tail.className = 'gp-pin__tail'
+  const shadow = document.createElement('span')
+  shadow.className = 'gp-pin__shadow'
+  body.appendChild(card)
+  body.appendChild(tail)
+  root.appendChild(body)
+  root.appendChild(shadow)
+
+  for (const type of ['mousedown', 'dblclick', 'touchstart'] as const) {
+    card.addEventListener(type, (e) => e.stopPropagation(), { passive: true })
+  }
+  card.addEventListener('click', (e) => {
+    e.stopPropagation()
+    onClick()
+  })
+  return { root, card, title, meta }
 }
 
 export interface PickupMapHandle {
@@ -64,17 +125,8 @@ interface PickupMapProps {
   searchPin?: { lat: number; lng: number } | null
   /** Fires once the style has loaded, with the live map instance. */
   onReady?: (map: MlMap) => void
-}
-
-function pinsGeoJSON(pins: MapPin[], selectedId: string | null | undefined) {
-  return {
-    type: 'FeatureCollection' as const,
-    features: pins.map((p) => ({
-      type: 'Feature' as const,
-      geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
-      properties: { id: p.id, full: p.full, selected: p.id === selectedId },
-    })),
-  }
+  /** Position of the zoom/recenter stack (it sits under the page's right column). */
+  controlsClassName?: string
 }
 
 export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function PickupMap(
@@ -89,11 +141,13 @@ export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function Pi
     draftPin = null,
     searchPin = null,
     onReady,
+    controlsClassName = 'right-2 top-2',
   },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MlMap | null>(null)
+  const markersRef = useRef(new Map<string, PinMarker>())
   const [ready, setReady] = useState(false)
   // Latest callbacks without re-running the init effect.
   const onReadyRef = useRef(onReady)
@@ -125,19 +179,6 @@ export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function Pi
     mapRef.current = map
 
     map.on('load', () => {
-      map.addSource(PINS_SOURCE, { type: 'geojson', data: pinsGeoJSON([], null) })
-      map.addLayer({
-        id: PINS_LAYER,
-        type: 'circle',
-        source: PINS_SOURCE,
-        paint: {
-          'circle-radius': ['case', ['get', 'selected'], 11, 8],
-          'circle-color': ['case', ['get', 'full'], COLOR_FULL, COLOR_OPEN],
-          'circle-stroke-width': ['case', ['get', 'selected'], 3, 2],
-          'circle-stroke-color': ['case', ['get', 'selected'], COLOR_SELECTED_RING, '#ffffff'],
-        },
-      })
-
       map.addSource(SEARCH_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
       map.addLayer({
         id: SEARCH_LAYER,
@@ -163,23 +204,17 @@ export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function Pi
         },
       })
 
-      // Pick mode → report the point. Otherwise: click a pin → select it;
-      // click empty map → clear the selection.
+      // Pin clicks stop at the pin (createPinElement), so every click that
+      // reaches the map is on empty map: in pick mode report the point,
+      // otherwise clear the selection and offer the spot.
       map.on('click', (e) => {
+        const at = { lat: e.lngLat.lat, lng: e.lngLat.lng }
         if (pickRef.current.pickMode) {
-          pickRef.current.onPick?.({ lat: e.lngLat.lat, lng: e.lngLat.lng })
+          pickRef.current.onPick?.(at)
           return
         }
-        const hit = map.queryRenderedFeatures(e.point, { layers: [PINS_LAYER] })[0]
-        const id = hit?.properties?.id
-        onSelectRef.current?.(typeof id === 'string' ? id : null)
-        if (typeof id !== 'string') pickRef.current.onMapClick?.({ lat: e.lngLat.lat, lng: e.lngLat.lng })
-      })
-      map.on('mouseenter', PINS_LAYER, () => {
-        if (!pickRef.current.pickMode) map.getCanvas().style.cursor = 'pointer'
-      })
-      map.on('mouseleave', PINS_LAYER, () => {
-        if (!pickRef.current.pickMode) map.getCanvas().style.cursor = ''
+        onSelectRef.current?.(null)
+        pickRef.current.onMapClick?.(at)
       })
 
       // The container may have been laid out after construction (flex parent).
@@ -188,17 +223,51 @@ export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function Pi
       onReadyRef.current?.(map)
     })
 
+    const markers = markersRef.current
     return () => {
-      map.remove()
+      markers.clear()
+      map.remove() // also removes every marker element
       mapRef.current = null
     }
   }, [])
 
-  // ── Pins: push the latest data into the source ───────────────────────────
+  // ── Pins: one floating card per game, synced by id ──────────────────────
   useEffect(() => {
-    if (!ready) return
-    const source = mapRef.current?.getSource(PINS_SOURCE) as GeoJSONSource | undefined
-    source?.setData(pinsGeoJSON(pins, selectedId))
+    const map = mapRef.current
+    if (!ready || !map) return
+    const markers = markersRef.current
+    const live = new Set<string>()
+
+    for (const p of pins) {
+      live.add(p.id)
+      let m = markers.get(p.id)
+      if (!m) {
+        const parts = createPinElement(() => onSelectRef.current?.(p.id))
+        const marker = new maplibregl.Marker({ element: parts.root, anchor: 'bottom' })
+          .setLngLat([p.lng, p.lat])
+          .addTo(map)
+        m = { marker, ...parts }
+        markers.set(p.id, m)
+      } else {
+        m.marker.setLngLat([p.lng, p.lat])
+      }
+      const selected = p.id === selectedId
+      m.title.textContent = p.title
+      m.meta.textContent = p.meta
+      m.card.setAttribute('aria-label', `${p.title}, ${p.meta}${p.full ? ', full' : ''}`)
+      m.card.setAttribute('aria-pressed', String(selected))
+      m.root.classList.toggle('gp-pin--full', p.full)
+      m.root.classList.toggle('gp-pin--selected', selected)
+      // Selected on top, then open games above full ones.
+      m.root.style.zIndex = selected ? '3' : p.full ? '1' : '2'
+    }
+
+    for (const [id, m] of markers) {
+      if (!live.has(id)) {
+        m.marker.remove()
+        markers.delete(id)
+      }
+    }
   }, [ready, pins, selectedId])
 
   // ── Draft pin + pick-mode cursor ─────────────────────────────────────────
@@ -230,6 +299,8 @@ export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function Pi
     const map = mapRef.current
     if (!ready || !map) return
     map.getCanvas().style.cursor = pickMode ? 'crosshair' : ''
+    // Pins fade and ignore clicks while a location is being picked (game-pin.css).
+    map.getContainer().classList.toggle('gp-picking', pickMode)
   }, [ready, pickMode])
 
   const recenter = () =>
@@ -252,8 +323,8 @@ export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function Pi
         </div>
       )}
 
-      {/* Floating control stack, top-right below the search bar (home.tsx). */}
-      <div className="absolute right-3 top-[4.25rem] z-10 flex flex-col gap-2">
+      {/* Floating control stack (zoom, recenter), positioned by the page. */}
+      <div className={cn('absolute z-10 flex flex-col gap-2', controlsClassName)}>
         <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-card/80 shadow-lg backdrop-blur-md">
           <CtrlButton label="Zoom in" onClick={() => mapRef.current?.zoomIn()}>
             <Plus className="h-4 w-4" aria-hidden />

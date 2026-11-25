@@ -44,8 +44,8 @@ export function GameChat({ gameId, title, onClose }: GameChatProps) {
       aria-label={`Chat: ${title}`}
       className={cn(
         'absolute z-30 flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl',
-        // phones: over the card; md+: to the left of the card
-        'inset-x-3 bottom-3 h-[60%] md:inset-x-auto md:bottom-3 md:right-[calc(4rem+24rem+0.75rem)] md:top-[4.25rem] md:h-auto md:w-80',
+        // phones: over the card; md+: just right of the card (left column)
+        'inset-x-2 bottom-2 h-[60%] md:inset-x-auto md:bottom-2 md:left-[calc(0.5rem+24rem+0.5rem)] md:top-12 md:h-auto md:w-80',
       )}
     >
       <header className="flex items-center gap-2 border-b border-border px-4 py-3">

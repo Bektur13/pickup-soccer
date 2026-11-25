@@ -23,6 +23,7 @@ import { PlaceSearch } from '../../components/map/PlaceSearch'
 import { useLiveGames } from '../../hooks/useLiveGames'
 import { Button } from '@/components/ui'
 import { getJson } from '@/lib/api'
+import { formatKickoffShort } from '@/lib/games'
 
 type LatLng = { lat: number; lng: number }
 
@@ -79,6 +80,8 @@ export default function HomePage() {
         lat: g.data.lat,
         lng: g.data.lng,
         full: g.data.status === 'full',
+        title: g.data.title,
+        meta: `${formatKickoffShort(g.data.startsAt)} · ${g.data.playerCount ?? 0}/${g.data.maxPlayers}`,
       })),
     [games],
   )
@@ -101,24 +104,40 @@ export default function HomePage() {
         onPick={setFormLocation}
         draftPin={createOpen ? location : spot}
         searchPin={searchPin}
+        // Under the right column: account (nav) → search → Create game → controls.
+        controlsClassName={isSignedIn ? 'right-2 top-[8.75rem]' : 'right-2 top-[6rem]'}
       />
 
-      {/* Top right: address / place search (controls sit just below it). */}
-      <PlaceSearch
-        className="absolute right-3 top-3 z-20 w-[min(20rem,calc(100%-1.5rem))]"
-        onPick={(p) => {
-          setSearchPin({ lat: p.lat, lng: p.lng })
-          mapRef.current?.flyTo(p.lat, p.lng, 15)
-          if (createOpen) setFormLocation(p)
-          else if (isSignedIn) setSpot(p)
-        }}
-      />
+      {/* Right column, under the account (Navigation): search, then Create game. */}
+      <div className="absolute right-2 top-12 z-20 flex w-[min(20rem,calc(100%-1rem))] flex-col items-end gap-2">
+        <PlaceSearch
+          className="w-full"
+          onPick={(p) => {
+            setSearchPin({ lat: p.lat, lng: p.lng })
+            mapRef.current?.flyTo(p.lat, p.lng, 15)
+            if (createOpen) setFormLocation(p)
+            else if (isSignedIn) setSpot(p)
+          }}
+        />
+        {isSignedIn && !createOpen && (
+          <Button
+            size="sm"
+            onClick={() => openCreateAt(null)}
+            data-testid="nav-create-game"
+            className="rounded-full px-4 shadow-md"
+          >
+            <Plus aria-hidden /> Create game
+          </Button>
+        )}
+      </div>
 
       {/* "Create a game here" for a clicked or searched spot. */}
       {spot && !createOpen && (
         <div
           data-testid="spot-prompt"
-          className="absolute left-1/2 top-[4.25rem] z-20 flex w-[min(24rem,calc(100%-1.5rem))] -translate-x-1/2 items-center gap-3 rounded-2xl border border-border bg-card/95 px-4 py-3 shadow-xl backdrop-blur-md md:top-3"
+          // Phones: bottom centre (in place of the games list); md+: top centre,
+          // between the nav pill and the account.
+          className="absolute bottom-2 left-1/2 z-20 flex w-[min(24rem,calc(100%-1rem))] -translate-x-1/2 items-center gap-3 rounded-2xl border border-border bg-card/95 px-4 py-3 shadow-xl backdrop-blur-md md:bottom-auto md:top-2"
         >
           <MapPin className="h-5 w-5 shrink-0 text-orange-500" aria-hidden />
           <div className="min-w-0 flex-1">
@@ -144,8 +163,8 @@ export default function HomePage() {
           games={games}
           status={status}
           selectedId={selectedId}
-          // On phones the open game card takes the bottom of the screen.
-          className={selectedGame ? 'max-md:hidden' : undefined}
+          // On phones the open game card / spot prompt takes the bottom of the screen.
+          className={selectedGame || spot ? 'max-md:hidden' : undefined}
           onSelect={(g) => {
             setSelectedId(g.recordId)
             setSpot(null)

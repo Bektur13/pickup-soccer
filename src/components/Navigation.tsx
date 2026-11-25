@@ -1,17 +1,22 @@
 /**
- * Top nav — minimal placeholder bar wired to the app's mechanisms:
- * nav.ts-driven links (with role/dev filtering), sign-in via <AuthOverlay>,
- * and sign-out. Restyle or rebuild it freely; keep the data-testid hooks
- * (`app-navigation`, `nav-sign-in-button`, `nav-user-name`, `nav-user-email`)
- * — the shipped tests rely on them. `nav-user-email` is the one that carries
- * an identity the test can check exactly: a display name is optional, the
- * email is the credential the session was opened with.
+ * Top nav — a transparent overlay, so the map fills the whole screen:
+ *   - top left: a small see-through pill with the app name + nav.ts links
+ *     (Home, Settings; a menu button on phones)
+ *   - top right: the account (avatar + name → sign out) or "Sign in"
+ * Nothing else is drawn between them. On the map page, the search bar and the
+ * "Create game" button sit under the account (home.tsx).
+ *
+ * Keep the data-testid hooks (`app-navigation`, `nav-sign-in-button`,
+ * `nav-user-name`, `nav-user-email`) — the shipped tests rely on them.
+ * `nav-user-email` is the one that carries an identity the test can check
+ * exactly: a display name is optional, the email is the credential the
+ * session was opened with.
  */
 
 import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { AuthOverlay, useAuthProfileReady, signOut } from 'deepspace'
-import { ChevronDown, LogOut, Menu, Plus, X } from 'lucide-react'
+import { ChevronDown, LogOut, Menu, X } from 'lucide-react'
 import { APP_NAME } from '../constants'
 import type { Role } from '../constants'
 import { nav } from '../nav'
@@ -27,6 +32,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui'
+
+/** The light, see-through "glass" used by every floating control on the map. */
+const GLASS = 'border border-border/70 bg-card/75 shadow-sm backdrop-blur-md'
 
 export default function Navigation() {
   const { isLoaded, isSignedIn, user, userLoading } = useAuthProfileReady({ requireUser: true })
@@ -58,8 +66,8 @@ export default function Navigation() {
         to={item.path}
         aria-current={active ? 'page' : undefined}
         className={cn(
-          'px-3 py-1.5 text-sm',
-          active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+          'rounded-full px-3 py-1 text-sm transition-colors',
+          active ? 'bg-secondary font-medium text-foreground' : 'text-muted-foreground hover:text-foreground',
         )}
       >
         {item.label}
@@ -69,33 +77,47 @@ export default function Navigation() {
 
   return (
     <>
-      <nav data-testid="app-navigation" className="border-b border-border bg-background">
-        <div className="mx-auto flex h-12 max-w-7xl items-center gap-4 px-4">
-          <Link to="/home" className="text-sm font-semibold text-foreground">
-            {APP_NAME}
-          </Link>
-
-          <div className="hidden items-center md:flex">{visibleNav.map(navLink)}</div>
-
-          <div className="flex-1" />
-
-          {isLoaded && isSignedIn && (
-            // Opens the create form on the map page (home.tsx reads ?create=1).
-            <Link
-              to="/home?create=1"
-              data-testid="nav-create-game"
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
-            >
-              <Plus className="h-4 w-4" aria-hidden />
-              <span className="hidden sm:inline">Create game</span>
-              <span className="sr-only sm:hidden">Create game</span>
+      {/* The bar itself is invisible and lets clicks through to the map;
+          only the two clusters below catch the pointer. */}
+      <nav
+        data-testid="app-navigation"
+        className="pointer-events-none absolute inset-x-0 top-0 z-40 flex items-start justify-between gap-2 p-2"
+      >
+        {/* Top left: app name + links */}
+        <div className="pointer-events-auto relative">
+          <div className={cn('flex items-center gap-0.5 rounded-full py-1 pl-3 pr-1', GLASS)}>
+            <Link to="/home" className="pr-2 text-sm font-semibold text-foreground">
+              {APP_NAME}
             </Link>
+            <div className="hidden items-center gap-0.5 md:flex">{visibleNav.map(navLink)}</div>
+            <button
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground md:hidden"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              aria-label="Toggle menu"
+              aria-expanded={mobileMenuOpen}
+            >
+              {mobileMenuOpen ? <X className="h-4 w-4" aria-hidden /> : <Menu className="h-4 w-4" aria-hidden />}
+            </button>
+          </div>
+          {mobileMenuOpen && (
+            <div
+              className={cn(
+                'absolute left-0 top-[calc(100%+6px)] flex min-w-40 flex-col gap-0.5 rounded-2xl p-1 md:hidden',
+                GLASS,
+                'bg-card/95',
+              )}
+            >
+              {visibleNav.map(navLink)}
+            </div>
           )}
+        </div>
 
+        {/* Top right: account */}
+        <div className="pointer-events-auto">
           {!isLoaded ? null : isSignedIn && !profileReady ? (
             /* Signed in, profile still loading — skeleton pill, never the
                Sign in button (that would offer sign-in to a signed-in user). */
-            <div className="flex items-center gap-2 rounded-full border border-border bg-card/60 py-1 pl-1 pr-2.5">
+            <div className={cn('flex items-center gap-2 rounded-full py-1 pl-1 pr-2.5', GLASS)}>
               <div className="h-6 w-6 animate-pulse rounded-full bg-muted" />
               <div className="h-4 w-16 animate-pulse rounded-md bg-muted sm:w-20" />
             </div>
@@ -105,7 +127,10 @@ export default function Navigation() {
                 render={
                   <button
                     aria-label="Account menu"
-                    className="group flex items-center gap-2 rounded-full border border-border bg-card/60 py-1 pl-1 pr-2.5 text-sm transition-colors hover:bg-card"
+                    className={cn(
+                      'group flex items-center gap-2 rounded-full py-1 pl-1 pr-2.5 text-sm transition-colors hover:bg-card',
+                      GLASS,
+                    )}
                   >
                     <Avatar className="h-6 w-6 ring-1 ring-inset ring-border">
                       <AvatarImage src={user.imageUrl ?? undefined} referrerPolicy="no-referrer" />
@@ -149,27 +174,12 @@ export default function Navigation() {
             <button
               data-testid="nav-sign-in-button"
               onClick={() => setShowAuthModal(true)}
-              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+              className="rounded-full bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground shadow-sm hover:opacity-90"
             >
               Sign in
             </button>
           )}
-
-          <button
-            className="inline-flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground md:hidden"
-            onClick={() => setMobileMenuOpen((prev) => !prev)}
-            aria-label="Toggle menu"
-            aria-expanded={mobileMenuOpen}
-          >
-            {mobileMenuOpen ? <X className="h-4 w-4" aria-hidden /> : <Menu className="h-4 w-4" aria-hidden />}
-          </button>
         </div>
-
-        {mobileMenuOpen && (
-          <div className="flex flex-col border-t border-border px-2 py-2 md:hidden">
-            {visibleNav.map(navLink)}
-          </div>
-        )}
       </nav>
 
       {/* Google is the only OAuth button; the SDK always adds email/password

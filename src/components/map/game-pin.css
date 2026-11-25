@@ -1,0 +1,146 @@
+/*
+ * Game pins — small floating label cards (PickupMap.tsx, maplibregl.Marker).
+ *
+ * MapLibre positions the OUTER element (.gp-pin) by writing a transform on it,
+ * so nothing here transitions or animates .gp-pin itself (that would make pins
+ * lag behind the map while panning). The float/scale effects live on
+ * .gp-pin__body inside it.
+ */
+
+.gp-pin {
+  /* MapLibre adds .maplibregl-marker (position:absolute; top/left 0). */
+  cursor: pointer;
+}
+
+.gp-pin__body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: gp-float 3.2s ease-in-out infinite;
+  transform-origin: 50% 100%;
+}
+
+.gp-pin__card {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 11rem;
+  padding: 4px 9px 4px 5px;
+  border: 1px solid var(--color-border);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-card) 94%, transparent);
+  color: var(--color-card-foreground);
+  box-shadow: 0 6px 16px -6px rgba(17, 24, 39, 0.35), 0 1px 3px rgba(17, 24, 39, 0.12);
+  backdrop-filter: blur(6px);
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+.gp-pin__card:hover {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 10px 22px -8px rgba(17, 24, 39, 0.45), 0 1px 3px rgba(17, 24, 39, 0.15);
+}
+.gp-pin__card:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
+.gp-pin__ball {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  background: #16a34a; /* open: green */
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.gp-pin__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.15;
+}
+.gp-pin__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: 600;
+}
+.gp-pin__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10.5px;
+  color: var(--color-muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Pointer tail: its tip sits exactly on the game's location (anchor: bottom). */
+.gp-pin__tail {
+  width: 10px;
+  height: 10px;
+  margin-top: -6px;
+  background: color-mix(in srgb, var(--color-card) 94%, transparent);
+  border-right: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  transform: rotate(45deg);
+}
+/* Soft ground shadow under the floating card. */
+.gp-pin__shadow {
+  width: 14px;
+  height: 4px;
+  margin-top: 1px;
+  border-radius: 9999px;
+  background: rgba(17, 24, 39, 0.28);
+  filter: blur(1.5px);
+  animation: gp-shadow 3.2s ease-in-out infinite;
+}
+
+/* Full games: grey ball, slightly muted card. */
+.gp-pin--full .gp-pin__ball {
+  background: #9ca3af;
+}
+.gp-pin--full .gp-pin__card {
+  opacity: 0.88;
+}
+
+/* Selected: dark card (matches the app's dark buttons), a bit larger. */
+.gp-pin--selected .gp-pin__body {
+  animation: none;
+  transform: translateY(-3px) scale(1.08);
+}
+.gp-pin--selected .gp-pin__card,
+.gp-pin--selected .gp-pin__tail {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+}
+.gp-pin--selected .gp-pin__meta {
+  color: color-mix(in srgb, var(--color-primary-foreground) 75%, transparent);
+}
+
+/* While the user is picking a location for a new game, pins step aside. */
+.gp-picking .gp-pin {
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+@keyframes gp-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes gp-shadow {
+  0%, 100% { transform: scaleX(1); opacity: 1; }
+  50% { transform: scaleX(0.75); opacity: 0.6; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gp-pin__body,
+  .gp-pin__shadow {
+    animation: none;
+  }
+}
