@@ -12,10 +12,10 @@
  */
 
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import { useMutations, useUser } from 'deepspace'
+import { useMutations, useUser, type RecordData } from 'deepspace'
 import { Loader2, MapPin, MousePointerClick, Search, X } from 'lucide-react'
 import { Button, Input, Label, Textarea, cn, useToast } from '@/components/ui'
-import { getJson } from '@/lib/api'
+import { callAction, getJson } from '@/lib/api'
 import type { Game, SkillLevel, Surface } from '@/lib/games'
 import { KickoffPicker } from './KickoffPicker'
 
@@ -40,7 +40,14 @@ interface CreateGameDialogProps {
   onClose: () => void
   location: ChosenLocation | null
   onLocationChange: (location: ChosenLocation | null) => void
+  /** Called after a create or a successful edit. */
   onCreated: (gameId: string, at: { lat: number; lng: number }) => void
+  /**
+   * Edit mode: the organizer's existing game. The form starts pre-filled (the
+   * parent remounts it with `key` per game) and saves through the
+   * `updateGame` server action, which re-checks organizer + rules.
+   */
+  editing?: RecordData<Game> | null
 }
 
 /** "YYYY-MM-DDTHH:mm" in local time, for <input type="datetime-local">. */
@@ -79,21 +86,23 @@ export function CreateGameDialog({
   location,
   onLocationChange,
   onCreated,
+  editing = null,
 }: CreateGameDialogProps) {
   const { user } = useUser()
   const { createConfirmed, ready } = useMutations<NewGame>('games')
   const { success, error: toastError } = useToast()
+  const e0 = editing?.data
 
-  const [title, setTitle] = useState('')
-  const [fieldName, setFieldName] = useState('')
-  const [fieldNameTouched, setFieldNameTouched] = useState(false)
-  const [startsLocal, setStartsLocal] = useState(defaultKickoff)
-  const [durationMin, setDurationMin] = useState('90')
-  const [maxPlayers, setMaxPlayers] = useState('14')
-  const [cost, setCost] = useState('Free')
-  const [skillLevel, setSkillLevel] = useState<SkillLevel>('casual')
-  const [surface, setSurface] = useState<Surface>('grass')
-  const [notes, setNotes] = useState('')
+  const [title, setTitle] = useState(e0?.title ?? '')
+  const [fieldName, setFieldName] = useState(e0?.fieldName ?? '')
+  const [fieldNameTouched, setFieldNameTouched] = useState(!!e0)
+  const [startsLocal, setStartsLocal] = useState(() => (e0 ? toLocalInput(new Date(e0.startsAt)) : defaultKickoff()))
+  const [durationMin, setDurationMin] = useState(String(e0?.durationMin ?? 90))
+  const [maxPlayers, setMaxPlayers] = useState(String(e0?.maxPlayers ?? 14))
+  const [cost, setCost] = useState(e0?.cost ?? 'Free')
+  const [skillLevel, setSkillLevel] = useState<SkillLevel>(e0?.skillLevel ?? 'casual')
+  const [surface, setSurface] = useState<Surface>(e0?.surface ?? 'grass')
+  const [notes, setNotes] = useState(e0?.notes ?? '')
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -159,6 +168,37 @@ export function CreateGameDialog({
     setSubmitted(true)
     if (Object.keys(errors).length > 0 || !location) return
     setSaving(true)
+    const at = { lat: location.lat, lng: location.lng }
+
+    if (editing) {
+      // Edit: the server re-checks organizer, rules, and the max-players floor.
+      const r = await callAction<{ note?: string }>('updateGame', {
+        gameId: editing.recordId,
+        patch: {
+          title: title.trim(),
+          fieldName: shownFieldName.trim().slice(0, 120),
+          address: (location.address ?? '').slice(0, 300),
+          lat: location.lat,
+          lng: location.lng,
+          startsAt: new Date(startsLocal).toISOString(),
+          durationMin: Number(durationMin),
+          maxPlayers: Number(maxPlayers),
+          cost: cost.trim(),
+          skillLevel,
+          surface,
+          notes: notes.trim(),
+        },
+      })
+      setSaving(false)
+      if (r.success) {
+        success('Changes saved', r.data.note ?? 'Everyone sees the update now.')
+        onCreated(editing.recordId, at)
+      } else {
+        toastError('Could not save', r.error)
+      }
+      return
+    }
+
     try {
       const id = await createConfirmed({
         organizerName: (user?.name ?? '').slice(0, 80) || 'Organizer',
@@ -176,7 +216,6 @@ export function CreateGameDialog({
         notes: notes.trim(),
       })
       success('Game created', 'It’s on the map for everyone now.')
-      const at = { lat: location.lat, lng: location.lng }
       reset()
       onCreated(id, at)
     } catch (err) {
@@ -191,7 +230,7 @@ export function CreateGameDialog({
   return (
     <section
       data-testid="create-game-dialog"
-      aria-label="Create a game"
+      aria-label={editing ? "Edit game" : "Create a game"}
       className={cn(
         'absolute z-30 flex flex-col overflow-hidden border border-border bg-card shadow-2xl',
         // phones: bottom sheet (map stays clickable above it); md+: left column
@@ -199,7 +238,7 @@ export function CreateGameDialog({
       )}
     >
       <header className="flex items-center justify-between border-b border-border px-5 py-3">
-        <h2 className="text-base font-semibold text-foreground">Create a game</h2>
+        <h2 className="text-base font-semibold text-foreground">{editing ? 'Edit game' : 'Create a game'}</h2>
         <button
           type="button"
           onClick={onClose}
@@ -352,7 +391,7 @@ export function CreateGameDialog({
           data-testid="cg-submit"
         >
           {saving && <Loader2 className="animate-spin" aria-hidden />}
-          Create game
+          {editing ? 'Save changes' : 'Create game'}
         </Button>
       </div>
     </section>

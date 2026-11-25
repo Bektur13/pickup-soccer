@@ -21,7 +21,9 @@ import {
   DollarSign,
   Gauge,
   Layers,
+  Ban,
   Loader2,
+  Pencil,
   MapPin,
   MessageCircle,
   Snowflake,
@@ -30,7 +32,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import { Badge, Button, cn, useToast } from '@/components/ui'
+import { Badge, Button, ConfirmModal, cn, useToast } from '@/components/ui'
 import { callAction } from '@/lib/api'
 import { GameChat } from './GameChat'
 import { WeatherScene } from './WeatherScene'
@@ -154,6 +156,58 @@ interface Registration {
   userId: string
   userName?: string
   slot: number
+}
+
+/**
+ * Organizer-only: Edit (opens the form pre-filled) and Cancel game (confirm →
+ * `cancelGame` server action, which re-checks that the caller is the organizer).
+ */
+function OrganizerActions({ game, onEdit }: { game: RecordData<Game>; onEdit: () => void }) {
+  const { success, error } = useToast()
+  const [confirming, setConfirming] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const g = game.data
+  const editable = g.status === 'open' || g.status === 'full'
+  if (!editable) return null
+
+  async function cancel() {
+    setCancelling(true)
+    const r = await callAction<{ playersRemoved?: number }>('cancelGame', { gameId: game.recordId })
+    setCancelling(false)
+    setConfirming(false)
+    if (r.success) success('Game cancelled', 'Players were notified and their spots released.')
+    else error('Could not cancel', r.error)
+    // On success the game leaves the live list, so this card closes by itself.
+  }
+
+  return (
+    <div className="flex items-center gap-2" data-testid="organizer-actions">
+      <span className="mr-auto text-xs font-medium text-muted-foreground">You’re organizing</span>
+      <Button variant="outline" size="sm" onClick={onEdit} data-testid="game-edit">
+        <Pencil aria-hidden /> Edit
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setConfirming(true)}
+        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+        data-testid="game-cancel"
+      >
+        <Ban aria-hidden /> Cancel game
+      </Button>
+      <ConfirmModal
+        open={confirming}
+        onClose={() => !cancelling && setConfirming(false)}
+        onConfirm={cancel}
+        title={`Cancel “${g.title}”?`}
+        description={`It disappears from the map for everyone. The ${g.playerCount ?? 0} registered player(s) get an email and their spots are released. This can’t be undone.`}
+        confirmText="Cancel game"
+        cancelText="Keep it"
+        variant="destructive"
+        loading={cancelling}
+      />
+    </div>
+  )
 }
 
 /** Join / Leave / Full / Sign in — plus the Chat button for members. */
@@ -282,9 +336,11 @@ function Roster({ players, organizerId, loading }: { players: RecordData<Registr
 interface GameCardProps {
   game: RecordData<Game>
   onClose: () => void
+  /** Organizer clicked Edit — the page opens the form pre-filled. */
+  onEdit?: () => void
 }
 
-export function GameCard({ game, onClose }: GameCardProps) {
+export function GameCard({ game, onClose, onEdit }: GameCardProps) {
   const g = game.data
   const weather = useGameWeather(game.recordId, g.startsAt)
   const theme =
@@ -378,7 +434,8 @@ export function GameCard({ game, onClose }: GameCardProps) {
         <Roster players={roster.records} organizerId={g.organizerId} loading={roster.status === 'loading'} />
       </div>
 
-      <div className="border-t border-border px-5 py-3">
+      <div className="space-y-2 border-t border-border px-5 py-3">
+        {userId === g.organizerId && onEdit && <OrganizerActions game={game} onEdit={onEdit} />}
         <GameActions
           game={game}
           isRegistered={isRegistered}

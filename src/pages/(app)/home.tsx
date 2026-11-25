@@ -13,7 +13,7 @@
 
 import { useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useAuth } from 'deepspace'
+import { useAuth, type RecordData } from 'deepspace'
 import { MapPin, Plus, X } from 'lucide-react'
 import { PickupMap, type MapPin as GamePin, type PickupMapHandle } from '../../components/map/PickupMap'
 import { GamesPanel } from '../../components/games/GamesPanel'
@@ -23,7 +23,7 @@ import { PlaceSearch } from '../../components/map/PlaceSearch'
 import { useLiveGames } from '../../hooks/useLiveGames'
 import { Button } from '@/components/ui'
 import { getJson } from '@/lib/api'
-import { formatKickoffShort } from '@/lib/games'
+import { formatKickoffShort, type Game } from '@/lib/games'
 
 type LatLng = { lat: number; lng: number }
 
@@ -36,6 +36,10 @@ export default function HomePage() {
   // ── Create flow ─────────────────────────────────────────────────────────
   const [params, setParams] = useSearchParams()
   const createOpen = params.get('create') === '1' && isSignedIn
+  /** The organizer's game being edited (same side panel, pre-filled). */
+  const [editing, setEditing] = useState<RecordData<Game> | null>(null)
+  /** The create/edit panel is open → the map is in location-picking mode. */
+  const panelOpen = createOpen || !!editing
   const [location, setLocation] = useState<ChosenLocation | null>(null)
   /** A spot the user clicked / searched, offered as "Create a game here". */
   const [spot, setSpot] = useState<ChosenLocation | null>(null)
@@ -65,6 +69,7 @@ export default function HomePage() {
     )
 
   const openCreateAt = (at: ChosenLocation | null) => {
+    setEditing(null)
     setSpot(null)
     setSelectedId(null)
     if (at) setFormLocation(at)
@@ -72,6 +77,20 @@ export default function HomePage() {
   }
 
   const closeCreate = () => setParams({}, { replace: true })
+
+  const startEditing = (game: RecordData<Game>) => {
+    setSpot(null)
+    setSelectedId(null)
+    setLocation({ lat: game.data.lat, lng: game.data.lng, name: game.data.fieldName, address: game.data.address })
+    setEditing(game)
+  }
+
+  const closePanel = () => {
+    if (editing) {
+      setEditing(null)
+      setLocation(null)
+    } else closeCreate()
+  }
 
   const pins = useMemo<GamePin[]>(
     () =>
@@ -87,7 +106,7 @@ export default function HomePage() {
   )
 
   // Closes by itself if the game leaves the map (e.g. cancelled).
-  const selectedGame = createOpen ? undefined : games.find((g) => g.recordId === selectedId)
+  const selectedGame = panelOpen ? undefined : games.find((g) => g.recordId === selectedId)
 
   return (
     <div data-testid="home-map" className="relative h-full w-full">
@@ -100,9 +119,9 @@ export default function HomePage() {
           if (id) setSpot(null)
         }}
         onMapClick={(at) => setSpot(isSignedIn ? at : null)}
-        pickMode={createOpen}
+        pickMode={panelOpen}
         onPick={setFormLocation}
-        draftPin={createOpen ? location : spot}
+        draftPin={panelOpen ? location : spot}
         searchPin={searchPin}
         // Under the right column: account (nav) → search → Create game → controls.
         controlsClassName={isSignedIn ? 'right-2 top-[8.75rem]' : 'right-2 top-[6rem]'}
@@ -115,11 +134,11 @@ export default function HomePage() {
           onPick={(p) => {
             setSearchPin({ lat: p.lat, lng: p.lng })
             mapRef.current?.flyTo(p.lat, p.lng, 15)
-            if (createOpen) setFormLocation(p)
+            if (panelOpen) setFormLocation(p)
             else if (isSignedIn) setSpot(p)
           }}
         />
-        {isSignedIn && !createOpen && (
+        {isSignedIn && !panelOpen && (
           <Button
             size="sm"
             onClick={() => openCreateAt(null)}
@@ -132,7 +151,7 @@ export default function HomePage() {
       </div>
 
       {/* "Create a game here" for a clicked or searched spot. */}
-      {spot && !createOpen && (
+      {spot && !panelOpen && (
         <div
           data-testid="spot-prompt"
           // Phones: bottom centre (in place of the games list); md+: top centre,
@@ -158,7 +177,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {!createOpen && (
+      {!panelOpen && (
         <GamesPanel
           games={games}
           status={status}
@@ -174,16 +193,25 @@ export default function HomePage() {
       )}
 
       {selectedGame && (
-        <GameCard key={selectedGame.recordId} game={selectedGame} onClose={() => setSelectedId(null)} />
+        <GameCard
+          key={selectedGame.recordId}
+          game={selectedGame}
+          onClose={() => setSelectedId(null)}
+          onEdit={() => startEditing(selectedGame)}
+        />
       )}
 
       <CreateGameDialog
-        open={createOpen}
-        onClose={closeCreate}
+        // A fresh form per game being edited (pre-filled from `editing`).
+        key={editing?.recordId ?? 'new'}
+        open={panelOpen}
+        editing={editing}
+        onClose={closePanel}
         location={location}
         onLocationChange={setLocation}
         onCreated={(id, at) => {
-          closeCreate()
+          if (editing) setEditing(null)
+          else closeCreate()
           setLocation(null)
           setSelectedId(id)
           mapRef.current?.flyTo(at.lat, at.lng)

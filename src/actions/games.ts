@@ -58,7 +58,7 @@ function gameIdParam(params: Record<string, unknown>): string | null {
   return typeof id === 'string' && id.length > 0 && id.length <= 200 ? id : null
 }
 
-async function listRegistrations(tools: ActionTools, gameId: string) {
+export async function listRegistrations(tools: ActionTools, gameId: string) {
   const res = await tools.query<Registration>('registrations', {
     where: { gameId },
     limit: REGISTRATIONS_PAGE,
@@ -79,7 +79,7 @@ async function lookupUserName(tools: ActionTools, userId: string): Promise<strin
  * open/full to match. Cancelled/past games keep their status. Re-reads after
  * each write: the last action to finish always leaves the values correct.
  */
-async function syncGameCounts(tools: ActionTools, gameId: string): Promise<number | null> {
+export async function syncGameCounts(tools: ActionTools, gameId: string): Promise<number | null> {
   for (let round = 0; round < MAX_SYNC_ROUNDS; round++) {
     const [regs, gameRes] = await Promise.all([
       listRegistrations(tools, gameId),
@@ -103,7 +103,7 @@ async function syncGameCounts(tools: ActionTools, gameId: string): Promise<numbe
 }
 
 /** One line, no control characters — for names/titles going into an email subject. */
-function oneLine(s: string): string {
+export function oneLine(s: string): string {
   return s.replace(/[\r\n\t]+/g, ' ').trim().slice(0, 120)
 }
 
