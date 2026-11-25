@@ -29,6 +29,28 @@ export interface Place {
 export interface PlaceDeps {
   cache: TtlCache
   fetch: typeof fetch
+  /** Waits for a Nominatim slot; false = too busy, skip the call. Omitted in tests. */
+  throttle?: () => Promise<boolean>
+}
+
+/** Minimum spacing between our Nominatim calls (their policy: ≤1 request/second). */
+const MIN_GAP_MS = 1100
+/** Don't make a visitor wait longer than this for a slot. */
+const MAX_WAIT_MS = 4000
+let nextSlotAt = 0
+
+/**
+ * Per-worker-isolate pacing: hands out Nominatim slots at least MIN_GAP_MS
+ * apart. Cache hits never take a slot. It's per isolate (no shared store on
+ * the free tier), so it's a brake, not a hard global limit.
+ */
+export async function nominatimThrottle(): Promise<boolean> {
+  const now = Date.now()
+  const slot = Math.max(now, nextSlotAt)
+  if (slot - now > MAX_WAIT_MS) return false
+  nextSlotAt = slot + MIN_GAP_MS
+  if (slot > now) await new Promise((r) => setTimeout(r, slot - now))
+  return true
 }
 
 type NominatimPlace = { lat?: string; lon?: string; display_name?: string; name?: string; error?: string }
@@ -45,6 +67,10 @@ function toPlace(r: NominatimPlace): Place | null {
 async function nominatim(path: string, params: Record<string, string>, deps: PlaceDeps): Promise<unknown> {
   const url = new URL(path, NOMINATIM_URL)
   for (const [k, v] of Object.entries({ format: 'jsonv2', ...params })) url.searchParams.set(k, v)
+  if (deps.throttle && !(await deps.throttle())) {
+    console.warn(`[places] Nominatim busy — skipped ${path}`)
+    return null
+  }
   try {
     const res = await deps.fetch(url.toString(), {
       headers: { 'User-Agent': USER_AGENT, Accept: 'application/json', 'Accept-Language': 'en' },

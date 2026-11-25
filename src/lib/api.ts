@@ -36,9 +36,17 @@ export async function callAction<T = Record<string, unknown>>(
   }
 }
 
-/** GET a JSON endpoint as the signed-in user. Throws on non-2xx with the server's message. */
-export async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(path, { headers: await authHeaders(), signal })
+/**
+ * GET a JSON endpoint. Sends the signed-in user's token unless `auth: false`
+ * (public endpoints — avoids a token request, and its 401, for visitors).
+ * Throws on non-2xx with the server's message.
+ */
+export async function getJson<T>(
+  path: string,
+  signal?: AbortSignal,
+  { auth = true }: { auth?: boolean } = {},
+): Promise<T> {
+  const res = await fetch(path, { headers: auth ? await authHeaders() : {}, signal })
   const body = (await res.json().catch(() => ({}))) as T & { error?: string }
   if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`)
   return body

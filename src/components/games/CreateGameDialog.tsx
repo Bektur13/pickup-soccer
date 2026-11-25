@@ -117,7 +117,9 @@ export function CreateGameDialog({
     if (trimmed.length < 3) return
     const ctrl = new AbortController()
     const timer = setTimeout(() => {
-      getJson<{ places: Place[] }>(`/api/places/search?q=${encodeURIComponent(trimmed)}`, ctrl.signal)
+      getJson<{ places: Place[] }>(`/api/places/search?q=${encodeURIComponent(trimmed)}`, ctrl.signal, {
+        auth: false, // public endpoint
+      })
         .then((r) => setSearch({ q: trimmed, places: r.places }))
         .catch((e: unknown) => {
           if (!ctrl.signal.aborted) setSearch({ q: trimmed, error: e instanceof Error ? e.message : 'Search failed' })

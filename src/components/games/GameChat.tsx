@@ -45,7 +45,7 @@ export function GameChat({ gameId, title, onClose }: GameChatProps) {
       className={cn(
         'absolute z-30 flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl',
         // phones: over the card; md+: to the left of the card
-        'inset-x-3 bottom-3 h-[60%] md:inset-x-auto md:bottom-3 md:right-[calc(4rem+24rem+0.75rem)] md:top-3 md:h-auto md:w-80',
+        'inset-x-3 bottom-3 h-[60%] md:inset-x-auto md:bottom-3 md:right-[calc(4rem+24rem+0.75rem)] md:top-[4.25rem] md:h-auto md:w-80',
       )}
     >
       <header className="flex items-center gap-2 border-b border-border px-4 py-3">

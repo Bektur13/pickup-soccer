@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { normalizeQuery, PLACE_CACHE_TTL_SECONDS, reversePlace, searchPlaces } from './places'
+import { nominatimThrottle, normalizeQuery, PLACE_CACHE_TTL_SECONDS, reversePlace, searchPlaces } from './places'
 import type { TtlCache } from './weather-cache'
 
 beforeEach(() => {
@@ -64,6 +64,35 @@ describe('searchPlaces', () => {
     const { deps, store } = setup({ error: 'oops' }, 503)
     expect(await searchPlaces('park', deps)).toBeNull()
     expect(store.size).toBe(0)
+  })
+})
+
+describe('nominatimThrottle', () => {
+  it('spaces calls ≥1.1 s apart and refuses when the wait would exceed 4 s', async () => {
+    vi.useFakeTimers()
+    try {
+      const granted: number[] = []
+      const t0 = Date.now()
+      const runs = Array.from({ length: 6 }, () =>
+        nominatimThrottle().then((ok) => {
+          if (ok) granted.push(Date.now() - t0)
+          return ok
+        }),
+      )
+      await vi.advanceTimersByTimeAsync(10_000)
+      const results = await Promise.all(runs)
+      // Slots at 0, 1.1, 2.2, 3.3 s are within the 4 s wait; later ones are refused.
+      expect(results.filter(Boolean)).toHaveLength(4)
+      for (let i = 1; i < granted.length; i++) expect(granted[i] - granted[i - 1]).toBeGreaterThanOrEqual(1100)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a busy throttle skips the Nominatim call', async () => {
+    const { deps, calls } = setup([CROSSROADS])
+    expect(await searchPlaces('crossroads', { ...deps, throttle: async () => false })).toBeNull()
+    expect(calls).toHaveLength(0)
   })
 })
 

@@ -15,6 +15,7 @@ import { PickupMap, type MapPin, type PickupMapHandle } from '../../components/m
 import { GamesPanel } from '../../components/games/GamesPanel'
 import { GameCard } from '../../components/games/GameCard'
 import { CreateGameDialog, type ChosenLocation } from '../../components/games/CreateGameDialog'
+import { PlaceSearch } from '../../components/map/PlaceSearch'
 import { useLiveGames } from '../../hooks/useLiveGames'
 import { getJson } from '@/lib/api'
 
@@ -29,6 +30,7 @@ export default function HomePage() {
   const createRequested = params.get('create') === '1' && isSignedIn
   const [picking, setPicking] = useState(false)
   const [location, setLocation] = useState<ChosenLocation | null>(null)
+  const [searchPin, setSearchPin] = useState<{ lat: number; lng: number } | null>(null)
 
   const closeCreate = () => {
     setPicking(false)
@@ -78,6 +80,16 @@ export default function HomePage() {
         pickMode={picking}
         onPick={handlePick}
         draftPin={createRequested ? location : null}
+        searchPin={searchPin}
+      />
+
+      {/* Top right: address / place search (controls sit just below it). */}
+      <PlaceSearch
+        className="absolute right-3 top-3 z-20 w-[min(20rem,calc(100%-1.5rem))]"
+        onPick={(p) => {
+          setSearchPin({ lat: p.lat, lng: p.lng })
+          mapRef.current?.flyTo(p.lat, p.lng, 15)
+        }}
       />
 
       {!picking && (
@@ -85,6 +97,8 @@ export default function HomePage() {
           games={games}
           status={status}
           selectedId={selectedId}
+          // On phones the open game card takes the bottom of the screen.
+          className={selectedGame ? 'max-md:hidden' : undefined}
           onSelect={(g) => {
             setSelectedId(g.recordId)
             mapRef.current?.flyTo(g.data.lat, g.data.lng)
@@ -99,7 +113,7 @@ export default function HomePage() {
       {picking && (
         <div
           data-testid="pick-banner"
-          className="absolute left-1/2 top-3 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-border bg-card/95 px-4 py-2 text-sm shadow-lg backdrop-blur-md"
+          className="absolute left-1/2 top-[4.25rem] z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-border bg-card/95 px-4 py-2 text-sm shadow-lg backdrop-blur-md"
         >
           <MousePointerClick className="h-4 w-4 text-orange-500" aria-hidden />
           <span className="text-foreground">Click the map where the game will be played</span>

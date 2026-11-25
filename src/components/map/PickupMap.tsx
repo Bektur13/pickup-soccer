@@ -28,6 +28,9 @@ const PINS_LAYER = 'game-pins'
 const DRAFT_SOURCE = 'draft-pin'
 const DRAFT_LAYER = 'draft-pin'
 const COLOR_DRAFT = '#f97316' // orange: the field being chosen for a new game
+const SEARCH_SOURCE = 'search-pin'
+const SEARCH_LAYER = 'search-pin'
+const COLOR_SEARCH = '#2563eb' // blue: the place found with the search bar
 
 const COLOR_OPEN = '#16a34a' // green: spots left
 const COLOR_FULL = '#9ca3af' // gray: full (CLAUDE.md "gray pin when full")
@@ -41,7 +44,7 @@ export interface MapPin {
 }
 
 export interface PickupMapHandle {
-  flyTo(lat: number, lng: number): void
+  flyTo(lat: number, lng: number, zoom?: number): void
 }
 
 interface PickupMapProps {
@@ -55,6 +58,8 @@ interface PickupMapProps {
   onPick?: (at: { lat: number; lng: number }) => void
   /** The location chosen for a new game, shown as an orange pin. */
   draftPin?: { lat: number; lng: number } | null
+  /** The place found with the search bar, shown as a blue pin. */
+  searchPin?: { lat: number; lng: number } | null
   /** Fires once the style has loaded, with the live map instance. */
   onReady?: (map: MlMap) => void
 }
@@ -71,7 +76,17 @@ function pinsGeoJSON(pins: MapPin[], selectedId: string | null | undefined) {
 }
 
 export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function PickupMap(
-  { className, pins = [], selectedId, onSelectPin, pickMode = false, onPick, draftPin = null, onReady },
+  {
+    className,
+    pins = [],
+    selectedId,
+    onSelectPin,
+    pickMode = false,
+    onPick,
+    draftPin = null,
+    searchPin = null,
+    onReady,
+  },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -86,10 +101,10 @@ export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function Pi
   pickRef.current = { pickMode, onPick }
 
   useImperativeHandle(ref, () => ({
-    flyTo(lat, lng) {
+    flyTo(lat, lng, zoom) {
       const map = mapRef.current
       if (!map) return
-      map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 14) })
+      map.flyTo({ center: [lng, lat], zoom: zoom ?? Math.max(map.getZoom(), 14) })
     },
   }))
 
@@ -120,6 +135,18 @@ export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function Pi
         },
       })
 
+      map.addSource(SEARCH_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      map.addLayer({
+        id: SEARCH_LAYER,
+        type: 'circle',
+        source: SEARCH_SOURCE,
+        paint: {
+          'circle-radius': 7,
+          'circle-color': COLOR_SEARCH,
+          'circle-stroke-width': 3,
+          'circle-stroke-color': '#ffffff',
+        },
+      })
       map.addSource(DRAFT_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
       map.addLayer({
         id: DRAFT_LAYER,
@@ -186,6 +213,18 @@ export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function Pi
   useEffect(() => {
     const map = mapRef.current
     if (!ready || !map) return
+    const source = map.getSource(SEARCH_SOURCE) as GeoJSONSource | undefined
+    source?.setData({
+      type: 'FeatureCollection',
+      features: searchPin
+        ? [{ type: 'Feature', geometry: { type: 'Point', coordinates: [searchPin.lng, searchPin.lat] }, properties: {} }]
+        : [],
+    })
+  }, [ready, searchPin])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!ready || !map) return
     map.getCanvas().style.cursor = pickMode ? 'crosshair' : ''
   }, [ready, pickMode])
 
@@ -209,8 +248,8 @@ export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function Pi
         </div>
       )}
 
-      {/* Floating control stack, top-right under the top bar. */}
-      <div className="absolute right-3 top-3 z-10 flex flex-col gap-2">
+      {/* Floating control stack, top-right below the search bar (home.tsx). */}
+      <div className="absolute right-3 top-[4.25rem] z-10 flex flex-col gap-2">
         <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-card/80 shadow-lg backdrop-blur-md">
           <CtrlButton label="Zoom in" onClick={() => mapRef.current?.zoomIn()}>
             <Plus className="h-4 w-4" aria-hidden />
