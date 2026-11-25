@@ -23,6 +23,12 @@ const USER_BOUND: Record<string, string> = {
   messages: 'authorId',
 }
 
+/** `uniqueOn` per collection, enforced in create like the RecordRoom does. */
+const UNIQUE_ON: Record<string, string[]> = {
+  registrations: ['gameId', 'slot'],
+  reminders_sent: ['gameId', 'userId'],
+}
+
 function jitter() {
   return new Promise<void>((r) => setTimeout(r, Math.random() * 4))
 }
@@ -38,7 +44,7 @@ export class FakeRoom {
 
   rows(name: string, where: Record<string, unknown> = {}) {
     return [...this.table(name).values()].filter((r) =>
-      Object.entries(where).every(([k, v]) => r.data[k] === v),
+      Object.entries(where).every(([k, v]) => (k === 'recordId' ? r.recordId === v : r.data[k] === v)),
     )
   }
 
@@ -72,15 +78,14 @@ export class FakeRoom {
           const next = { ...(existing?.data ?? {}), ...data }
           const bound = USER_BOUND[collection]
           if (bound) next[bound] = existing ? existing.data[bound] : userId
-          if (collection === 'registrations') {
+          const unique = UNIQUE_ON[collection]
+          if (unique) {
             const clash = [...t.values()].some(
-              (r) => r.recordId !== id && r.data.gameId === next.gameId && r.data.slot === next.slot,
+              (r) => r.recordId !== id && unique.every((f) => r.data[f] === next[f]),
             )
             if (clash) {
-              return {
-                success: false,
-                error: `Duplicate: a record with gameId=${next.gameId}, slot=${next.slot} already exists in registrations`,
-              }
+              const fields = unique.map((f) => `${f}=${next[f]}`).join(', ')
+              return { success: false, error: `Duplicate: a record with ${fields} already exists in ${collection}` }
             }
           }
           if (collection === 'team_members' && next.status === undefined) next.status = 'active'
@@ -129,13 +134,41 @@ export class FakeRoom {
   }
 }
 
+/**
+ * The cron context's `records` API (deepspace/worker buildCronContext) over
+ * this room: acts as the owner, returns data directly, throws on failure
+ * with the same "RecordRoom tool … failed: <error>" message.
+ */
+export function cronRecordsFor(room: FakeRoom, ownerId = 'owner') {
+  const tools = room.toolsFor(ownerId)
+  const unwrap = <T>(tool: string, r: { success: boolean; data?: T; error?: string }): T => {
+    if (!r.success) throw new Error(`RecordRoom tool ${tool} failed: ${r.error}`)
+    return r.data as T
+  }
+  return {
+    query: async (collection: string, opts?: { where?: Record<string, unknown>; limit?: number }) =>
+      unwrap<{ records: unknown[] }>('records.query', await tools.query(collection, opts)).records,
+    create: async (collection: string, data: Record<string, unknown>) =>
+      unwrap('records.create', await tools.create(collection, data)),
+    update: async (collection: string, recordId: string, data: Record<string, unknown>) =>
+      unwrap('records.update', await tools.update(collection, recordId, data)),
+    delete: async (collection: string, recordId: string) =>
+      unwrap('records.delete', await tools.remove(collection, recordId)),
+  }
+}
+
 /** Build an action context for `userId` against this room. */
-export function ctx(room: FakeRoom, userId: string, params: Record<string, unknown>): ActionContext<Env> {
+export function ctx(
+  room: FakeRoom,
+  userId: string,
+  params: Record<string, unknown>,
+  env: Partial<Env> = {},
+): ActionContext<Env> {
   return {
     userId,
     params,
     tools: room.toolsFor(userId),
-    env: {},
+    env,
     callerJwt: '',
   } as unknown as ActionContext<Env>
 }

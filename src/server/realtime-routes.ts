@@ -159,9 +159,13 @@ export function registerRealtimeRoutes(app: Hono<AppContext>): void {
     '/ws/cron/:roomId',
     wsRoute(
       (env) => env.CRON_ROOMS,
-      // Authenticated users get their current app role. Anonymous connections
-      // have no role and CronRoom enforces them as read-only viewers.
-      async (auth, env) => ({ role: await resolveAppRole(env, auth.userId) }),
+      // Only app admins may trigger/pause/resume scheduled jobs. CronRoom grants
+      // write access to `member` AND `admin`, so everyone else is passed in as
+      // a read-only `viewer` — no player can pause the reminder job.
+      // Anonymous connections have no role and are viewers too.
+      async (auth, env) => ({
+        role: (await resolveAppRole(env, auth.userId)) === 'admin' ? 'admin' : 'viewer',
+      }),
     ),
   )
 

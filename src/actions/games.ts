@@ -31,6 +31,7 @@ import type { Env } from '../../worker'
 import type { Game } from '../lib/games'
 import { registrationId } from '../schemas/registrations-schema'
 import { addChatMember, removeChatMember } from './chat'
+import { sendEmail, type EmailEnv } from '../server/email'
 
 interface Registration extends Record<string, unknown> {
   gameId: string
@@ -101,7 +102,59 @@ async function syncGameCounts(tools: ActionTools, gameId: string): Promise<numbe
   return null
 }
 
-export const joinGame: ActionHandler<Env> = async ({ userId, params, tools }) => {
+/** One line, no control characters — for names/titles going into an email subject. */
+function oneLine(s: string): string {
+  return s.replace(/[\r\n\t]+/g, ' ').trim().slice(0, 120)
+}
+
+/**
+ * Email the organizer that someone joined/left (CLAUDE.md: email via Resend;
+ * if it fails, the join still succeeds — log it). Runs after the join/leave is
+ * saved and never throws. The organizer's email is read server-side and only
+ * handed to Resend — never stored in a record or returned to a browser.
+ */
+async function notifyOrganizer(
+  env: EmailEnv,
+  tools: ActionTools,
+  game: GameData,
+  actorId: string,
+  actorName: string,
+  kind: 'joined' | 'left',
+  playerCount: number | null,
+): Promise<void> {
+  try {
+    if (!game.organizerId || game.organizerId === actorId) return
+    const org = await tools.get<{ email?: string }>('users', game.organizerId)
+    const to = org.success ? org.data.record.data.email : undefined
+    if (!to) {
+      console.warn(`[email] no email on file for organizer ${game.organizerId}; skipped`)
+      return
+    }
+    // The app is Bellevue-only, so kickoff times are shown in Pacific time.
+    const when = new Date(game.startsAt).toLocaleString('en-US', {
+      timeZone: 'America/Los_Angeles',
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+    const name = oneLine(actorName)
+    const title = oneLine(game.title)
+    const spots = playerCount === null ? '' : `\nSpots taken: ${playerCount} / ${game.maxPlayers}`
+    await sendEmail(env, {
+      to,
+      subject: `${name} ${kind} "${title}"`,
+      text:
+        `${name} ${kind} your game "${title}" at ${oneLine(game.fieldName)} (${when} Pacific).${spots}\n\n` +
+        `Open the map: https://pickup-soccer.app.space/home`,
+    })
+  } catch (err) {
+    console.error(`[email] organizer notice for ${game.title} failed: ${String(err)}`)
+  }
+}
+
+export const joinGame: ActionHandler<Env> = async ({ userId, params, tools, env }) => {
   const gameId = gameIdParam(params)
   if (!gameId) return fail('Missing gameId', 'bad_request')
 
@@ -154,6 +207,8 @@ export const joinGame: ActionHandler<Env> = async ({ userId, params, tools }) =>
       const member = await addChatMember(tools, gameId, userId)
       if (!member.success) console.error(`[games] chat membership for ${gameId}/${userId}: ${member.error}`)
       const playerCount = await syncGameCounts(tools, gameId)
+      // The join is saved; an email problem is only logged.
+      await notifyOrganizer(env, tools, game, userId, userName, 'joined', playerCount)
       return { success: true, data: { joined: true, alreadyJoined: false, playerCount } }
     }
     if (!created.error.startsWith('Duplicate:')) {
@@ -166,7 +221,7 @@ export const joinGame: ActionHandler<Env> = async ({ userId, params, tools }) =>
   return fail('Lots of people are joining right now — please try again', 'busy')
 }
 
-export const leaveGame: ActionHandler<Env> = async ({ userId, params, tools }) => {
+export const leaveGame: ActionHandler<Env> = async ({ userId, params, tools, env }) => {
   const gameId = gameIdParam(params)
   if (!gameId) return fail('Missing gameId', 'bad_request')
 
@@ -197,5 +252,9 @@ export const leaveGame: ActionHandler<Env> = async ({ userId, params, tools }) =
   }
 
   const playerCount = gameRes.success ? await syncGameCounts(tools, gameId) : null
+  if (gameRes.success) {
+    const leaverName = existing.data.record.data.userName || 'A player'
+    await notifyOrganizer(env, tools, gameRes.data.record.data, userId, leaverName, 'left', playerCount)
+  }
   return { success: true, data: { left: true, playerCount } }
 }

@@ -13,6 +13,7 @@ import { settingsSchema } from './schemas/admin-schema'
 import { gamesSchema } from './schemas/games-schema'
 import { registrationsSchema } from './schemas/registrations-schema'
 import { gameMessagesSchema, teamMembersSchema } from './schemas/chat-schema'
+import { remindersSentSchema } from './schemas/reminders-schema'
 
 export const schemas: CollectionSchema[] = [
   usersSchema,
@@ -21,4 +22,5 @@ export const schemas: CollectionSchema[] = [
   registrationsSchema,
   teamMembersSchema,
   gameMessagesSchema,
+  remindersSentSchema,
 ]
