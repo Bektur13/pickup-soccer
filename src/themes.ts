@@ -18,6 +18,11 @@
 
 export const THEMES = [
   {
+    id: 'pitch',
+    label: 'Pitch',
+    description: 'The app theme: light navbar and panels, dark buttons.',
+  },
+  {
     id: 'slate',
     label: 'Slate',
     description: 'Neutral dark placeholder default. Replace with your own theme.',

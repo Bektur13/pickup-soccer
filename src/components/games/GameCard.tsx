@@ -33,6 +33,7 @@ import {
 import { Badge, Button, cn, useToast } from '@/components/ui'
 import { callAction } from '@/lib/api'
 import { GameChat } from './GameChat'
+import { WeatherScene } from './WeatherScene'
 import { formatKickoff, type Game } from '@/lib/games'
 import { describeWeatherCode, type WeatherTheme } from '@/lib/weather'
 import { useGameWeather, type GameWeatherState } from '@/hooks/useGameWeather'
@@ -43,13 +44,13 @@ type IconType = ComponentType<{ className?: string; 'aria-hidden'?: boolean }>
 const THEMES: Record<WeatherTheme, { label: string; header: string; accent: string; icon: IconType }> = {
   sunny: {
     label: 'Sunny',
-    header: 'bg-linear-to-br from-amber-200 via-amber-300 to-orange-400 text-amber-950',
+    header: 'bg-linear-to-br from-sky-400 via-sky-300 to-amber-200 text-sky-950',
     accent: 'border-amber-400/60',
     icon: Sun,
   },
   cloudy: {
     label: 'Cloudy',
-    header: 'bg-linear-to-br from-slate-200 via-slate-300 to-slate-400 text-slate-900',
+    header: 'bg-linear-to-br from-slate-400 via-slate-500 to-slate-600 text-white',
     accent: 'border-slate-400/60',
     icon: Cloud,
   },
@@ -61,7 +62,7 @@ const THEMES: Record<WeatherTheme, { label: string; header: string; accent: stri
   },
   snowy: {
     label: 'Snowy',
-    header: 'bg-linear-to-br from-white via-sky-50 to-sky-200 text-sky-950',
+    header: 'bg-linear-to-br from-sky-300 via-sky-500 to-indigo-600 text-white',
     accent: 'border-sky-300/70',
     icon: Snowflake,
   },
@@ -114,20 +115,27 @@ function WeatherHeader({ state }: { state: GameWeatherState }) {
   const theme = THEMES[w.theme]
   const Icon = theme.icon
   return (
-    <div className={cn('flex items-center gap-4 px-5 py-4', theme.header)} data-weather-theme={w.theme}>
-      <Icon className="h-10 w-10 shrink-0" aria-hidden />
-      <div className="min-w-0">
-        <p className="text-2xl font-semibold leading-none" data-testid="weather-temp">
-          {w.temperatureF}°F
-        </p>
-        <p className="mt-1 text-sm opacity-90">
-          {describeWeatherCode(w.weatherCode)}
-          {w.precipitationProbability !== null && <> · {w.precipitationProbability}% chance of rain</>}
-        </p>
+    <div
+      className={cn('relative flex min-h-[7.5rem] items-end overflow-hidden px-5 pb-4 pt-8', theme.header)}
+      data-weather-theme={w.theme}
+    >
+      {/* Animated sun / clouds / rain / snow behind the text. */}
+      <WeatherScene theme={w.theme} />
+      <div className="relative z-10 flex items-end gap-3 [text-shadow:0_1px_3px_rgba(0,0,0,0.25)]">
+        <Icon className="h-9 w-9 shrink-0 drop-shadow-sm" aria-hidden />
+        <div className="min-w-0">
+          <span className="mb-1 inline-block rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
+            {theme.label}
+          </span>
+          <p className="text-3xl font-semibold leading-none drop-shadow-sm" data-testid="weather-temp">
+            {w.temperatureF}°F
+          </p>
+          <p className="mt-1 text-sm opacity-90">
+            {describeWeatherCode(w.weatherCode)}
+            {w.precipitationProbability !== null && <> · {w.precipitationProbability}% chance of rain</>}
+          </p>
+        </div>
       </div>
-      <span className="ml-auto self-start rounded-full bg-black/10 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide">
-        {theme.label}
-      </span>
     </div>
   )
 }
@@ -315,7 +323,7 @@ export function GameCard({ game, onClose }: GameCardProps) {
           type="button"
           onClick={onClose}
           aria-label="Close game card"
-          className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/10 text-current hover:bg-black/20"
+          className="absolute right-2 top-2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/15 text-current backdrop-blur-sm hover:bg-black/25"
         >
           <X className="h-4 w-4" aria-hidden />
         </button>

@@ -1,0 +1,161 @@
+/*
+ * Animated weather scenes for the game card header (WeatherScene.tsx).
+ * Purely decorative (aria-hidden). Everything animates transform/opacity only,
+ * so it stays smooth, and it all stops for users who prefer reduced motion.
+ */
+
+.wx-scene {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* ── Sunny ─────────────────────────────────────────────────────────────── */
+.wx-sun {
+  position: absolute;
+  top: -38px;
+  right: -26px;
+  width: 132px;
+  height: 132px;
+}
+.wx-sun__glow {
+  position: absolute;
+  inset: -40px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(255, 244, 179, 0.9) 0%, rgba(255, 214, 102, 0.45) 38%, rgba(255, 190, 70, 0) 70%);
+  animation: wx-glow 4s ease-in-out infinite;
+}
+.wx-sun__rays {
+  position: absolute;
+  inset: -22px;
+  border-radius: 9999px;
+  background: repeating-conic-gradient(rgba(255, 255, 255, 0.55) 0deg 6deg, rgba(255, 255, 255, 0) 6deg 30deg);
+  mask: radial-gradient(circle, transparent 46%, #000 48%, #000 62%, transparent 72%);
+  -webkit-mask: radial-gradient(circle, transparent 46%, #000 48%, #000 62%, transparent 72%);
+  animation: wx-spin 28s linear infinite;
+}
+.wx-sun__disc {
+  position: absolute;
+  inset: 22px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 35%, #fffbe6 0%, #ffe27a 45%, #ffb238 100%);
+  box-shadow: 0 0 30px 8px rgba(255, 214, 102, 0.75);
+  animation: wx-breathe 4s ease-in-out infinite;
+}
+.wx-sparkle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 8px 2px rgba(255, 245, 200, 0.8);
+  opacity: 0;
+  animation: wx-sparkle 5s ease-in-out infinite;
+}
+
+@keyframes wx-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes wx-glow {
+  0%, 100% { opacity: 0.75; transform: scale(0.94); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+@keyframes wx-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+@keyframes wx-sparkle {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.5); }
+  30% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-40px, 18px) scale(1.1); }
+}
+
+/* ── Clouds (cloudy, and the rain cloud) ───────────────────────────────── */
+.wx-cloud {
+  position: absolute;
+  width: 120px;
+  height: 36px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.85);
+  filter: blur(0.3px);
+  animation: wx-drift linear infinite;
+}
+.wx-cloud::before,
+.wx-cloud::after {
+  content: '';
+  position: absolute;
+  border-radius: 9999px;
+  background: inherit;
+}
+.wx-cloud::before {
+  width: 54px;
+  height: 54px;
+  left: 18px;
+  top: -26px;
+}
+.wx-cloud::after {
+  width: 42px;
+  height: 42px;
+  left: 58px;
+  top: -18px;
+}
+.wx-cloud--dark {
+  background: rgba(71, 85, 105, 0.85);
+}
+
+@keyframes wx-drift {
+  from { transform: translateX(-160px) scale(var(--wx-scale, 1)); }
+  to { transform: translateX(520px) scale(var(--wx-scale, 1)); }
+}
+@keyframes wx-bob {
+  0%, 100% { transform: translateY(0) scale(var(--wx-scale, 1)); }
+  50% { transform: translateY(-4px) scale(var(--wx-scale, 1)); }
+}
+
+/* ── Rainy ─────────────────────────────────────────────────────────────── */
+.wx-drop {
+  position: absolute;
+  top: -20px;
+  width: 2px;
+  height: 16px;
+  border-radius: 2px;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0), rgba(219, 234, 254, 0.95));
+  animation: wx-fall linear infinite;
+}
+@keyframes wx-fall {
+  from { transform: translate(0, 0) rotate(12deg); opacity: 0; }
+  10% { opacity: 1; }
+  to { transform: translate(-28px, 150px) rotate(12deg); opacity: 0.2; }
+}
+
+/* ── Snowy ─────────────────────────────────────────────────────────────── */
+.wx-flake {
+  position: absolute;
+  top: -10px;
+  border-radius: 9999px;
+  background: #ffffff;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.9);
+  animation: wx-snow linear infinite;
+}
+@keyframes wx-snow {
+  0% { transform: translate(0, 0); opacity: 0; }
+  10% { opacity: 1; }
+  25% { transform: translate(8px, 35px); }
+  50% { transform: translate(-6px, 70px); }
+  75% { transform: translate(8px, 105px); }
+  100% { transform: translate(-4px, 140px); opacity: 0.3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wx-scene * {
+    animation: none !important;
+  }
+  .wx-drop,
+  .wx-flake,
+  .wx-sparkle {
+    display: none;
+  }
+}

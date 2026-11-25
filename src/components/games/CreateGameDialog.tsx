@@ -17,6 +17,7 @@ import { Loader2, MapPin, MousePointerClick, Search, X } from 'lucide-react'
 import { Button, Input, Label, Textarea, cn, useToast } from '@/components/ui'
 import { getJson } from '@/lib/api'
 import type { Game, SkillLevel, Surface } from '@/lib/games'
+import { KickoffPicker } from './KickoffPicker'
 
 export interface ChosenLocation {
   lat: number
@@ -283,16 +284,11 @@ export function CreateGameDialog({
           />
         </Field>
 
+        <Field label="Kickoff" htmlFor="kickoff-date" error={show('startsAt')}>
+          <KickoffPicker value={startsLocal} onChange={setStartsLocal} invalid={!!show('startsAt')} />
+        </Field>
+
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Kickoff" htmlFor="cg-start" error={show('startsAt')}>
-            <Input
-              id="cg-start"
-              type="datetime-local"
-              value={startsLocal}
-              min={toLocalInput(new Date())}
-              onChange={(e) => setStartsLocal(e.target.value)}
-            />
-          </Field>
           <Field label="Duration" htmlFor="cg-duration" error={show('durationMin')}>
             <select id="cg-duration" className={SELECT_CLASS} value={durationMin} onChange={(e) => setDurationMin(e.target.value)}>
               {[60, 90, 120, 150, 180].map((m) => (

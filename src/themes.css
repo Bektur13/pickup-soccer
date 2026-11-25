@@ -16,6 +16,35 @@
  *   4. Switch to it via `data-theme` on <html> in index.html.
  */
 
+/* Pitch — the app's theme: light navbar, panels and cards on a soft
+ * off-white, with dark (near-black) buttons. */
+[data-theme="pitch"] {
+  color-scheme: light;
+  --color-background: #f6f7f5;
+  --color-foreground: #111827;
+  --color-card: #ffffff;
+  --color-card-foreground: #111827;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #111827;
+  --color-primary: #111827;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f1f3f1;
+  --color-secondary-foreground: #111827;
+  --color-muted: #f1f3f1;
+  --color-muted-foreground: #6b7280;
+  --color-accent: #eceeeb;
+  --color-accent-foreground: #111827;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #e3e6e2;
+  --color-input: #d9ddd8;
+  --color-ring: #111827;
+  --shadow-card: 0 1px 2px 0 rgba(17, 24, 39, 0.04);
+  --shadow-card-hover: 0 4px 12px 0 rgba(17, 24, 39, 0.08);
+  --color-shell: #f6f7f5;
+  --color-shell-panel: #ffffff;
+}
+
 /* Paper — light example theme; shows the full token contract incl.
  * `color-scheme: light`. Replace or delete it once the app has its own. */
 [data-theme="paper"] {
