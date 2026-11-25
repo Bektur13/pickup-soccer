@@ -7,6 +7,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { PickupMap, type MapPin, type PickupMapHandle } from '../../components/map/PickupMap'
 import { GamesPanel } from '../../components/games/GamesPanel'
+import { GameCard } from '../../components/games/GameCard'
 import { useLiveGames } from '../../hooks/useLiveGames'
 
 export default function HomePage() {
@@ -25,6 +26,9 @@ export default function HomePage() {
     [games],
   )
 
+  // Closes by itself if the game leaves the map (e.g. cancelled).
+  const selectedGame = games.find((g) => g.recordId === selectedId)
+
   return (
     <div data-testid="home-map" className="relative h-full w-full">
       <PickupMap ref={mapRef} pins={pins} selectedId={selectedId} onSelectPin={setSelectedId} />
@@ -37,6 +41,9 @@ export default function HomePage() {
           mapRef.current?.flyTo(g.data.lat, g.data.lng)
         }}
       />
+      {selectedGame && (
+        <GameCard key={selectedGame.recordId} game={selectedGame} onClose={() => setSelectedId(null)} />
+      )}
     </div>
   )
 }
