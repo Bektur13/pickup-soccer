@@ -19,4 +19,13 @@ describe('public pages prerender', () => {
     // without a browser would ship an empty static page.
     expect(html.slice(at)).toMatch(/<(h1|h2|p|main|section|article|a)\b/)
   })
+
+  // "/" redirects to the map in the browser, so its link-preview tags only
+  // exist in this prerendered HTML — check them here, not in a browser test.
+  it('"/" ships exactly one description and one canonical for link previews', () => {
+    const html = render('/')
+    expect(html.match(/<meta[^>]*name="description"/g)).toHaveLength(1)
+    expect(html.match(/<link[^>]*rel="canonical"/g)).toHaveLength(1)
+    expect(html).toContain('pickup soccer')
+  })
 })
