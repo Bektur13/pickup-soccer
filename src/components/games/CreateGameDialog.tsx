@@ -2,8 +2,9 @@
  * CreateGameDialog — the "Create game" form (CLAUDE.md: search a field by name
  * or drop a pin, then time, max players, cost, skill, surface, notes).
  *
- * The chosen location is owned by the parent (home.tsx) because "Drop a pin"
- * hides this dialog while the user clicks the map. Saving uses
+ * It's a side panel, not a modal, so the map stays usable: while it's open,
+ * clicking the map sets the field location (home.tsx puts the map in pick
+ * mode and owns the chosen location). Saving uses
  * `useMutations('games').createConfirmed`, which resolves only once the
  * RecordRoom has accepted the write (node_modules/deepspace/dist/index.d.ts),
  * so the dialog closes on real success. organizerId, playerCount and status are
@@ -12,19 +13,8 @@
 
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { useMutations, useUser } from 'deepspace'
-import { Loader2, MapPin, MousePointerClick, Search } from 'lucide-react'
-import {
-  Button,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Input,
-  Label,
-  Modal,
-  Textarea,
-  cn,
-  useToast,
-} from '@/components/ui'
+import { Loader2, MapPin, MousePointerClick, Search, X } from 'lucide-react'
+import { Button, Input, Label, Textarea, cn, useToast } from '@/components/ui'
 import { getJson } from '@/lib/api'
 import type { Game, SkillLevel, Surface } from '@/lib/games'
 
@@ -49,8 +39,6 @@ interface CreateGameDialogProps {
   onClose: () => void
   location: ChosenLocation | null
   onLocationChange: (location: ChosenLocation | null) => void
-  /** Hide the dialog and let the user click the map. */
-  onRequestPick: () => void
   onCreated: (gameId: string, at: { lat: number; lng: number }) => void
 }
 
@@ -89,7 +77,6 @@ export function CreateGameDialog({
   onClose,
   location,
   onLocationChange,
-  onRequestPick,
   onCreated,
 }: CreateGameDialogProps) {
   const { user } = useUser()
@@ -198,25 +185,42 @@ export function CreateGameDialog({
     }
   }
 
-  return (
-    <Modal open={open} onClose={onClose} size="lg" data-testid="create-game-dialog">
-      <DialogHeader>
-        <DialogTitle>Create a game</DialogTitle>
-      </DialogHeader>
+  if (!open) return null // state is kept while hidden
 
-      <form id="create-game-form" onSubmit={handleSubmit} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1 py-2" noValidate>
+  return (
+    <section
+      data-testid="create-game-dialog"
+      aria-label="Create a game"
+      className={cn(
+        'absolute z-30 flex flex-col overflow-hidden border border-border bg-card shadow-2xl',
+        // phones: bottom sheet (map stays clickable above it); md+: left column
+        'inset-x-0 bottom-0 max-h-[70%] rounded-t-2xl md:inset-x-auto md:bottom-3 md:left-3 md:top-3 md:max-h-none md:w-[26rem] md:rounded-2xl',
+      )}
+    >
+      <header className="flex items-center justify-between border-b border-border px-5 py-3">
+        <h2 className="text-base font-semibold text-foreground">Create a game</h2>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <X className="h-4 w-4" aria-hidden />
+        </button>
+      </header>
+
+      <form id="create-game-form" onSubmit={handleSubmit} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4" noValidate>
         <Field label="Title" htmlFor="cg-title" error={show('title')}>
           <Input id="cg-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Saturday 7v7" maxLength={80} />
         </Field>
 
         {/* Location: search OR drop a pin */}
         <div className="space-y-2 rounded-lg border border-border p-3">
-          <div className="flex items-center justify-between gap-2">
-            <Label htmlFor="cg-search">Field location</Label>
-            <Button type="button" variant="outline" size="sm" onClick={onRequestPick} data-testid="cg-drop-pin">
-              <MousePointerClick aria-hidden /> Drop a pin
-            </Button>
-          </div>
+          <Label htmlFor="cg-search">Field location</Label>
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="cg-click-hint">
+            <MousePointerClick className="h-3.5 w-3.5 text-orange-500" aria-hidden />
+            Click the map to place the field, or search for it:
+          </p>
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
             <Input
@@ -340,7 +344,7 @@ export function CreateGameDialog({
         </Field>
       </form>
 
-      <DialogFooter>
+      <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
         <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
@@ -354,7 +358,7 @@ export function CreateGameDialog({
           {saving && <Loader2 className="animate-spin" aria-hidden />}
           Create game
         </Button>
-      </DialogFooter>
-    </Modal>
+      </div>
+    </section>
   )
 }

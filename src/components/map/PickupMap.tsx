@@ -53,7 +53,9 @@ interface PickupMapProps {
   selectedId?: string | null
   /** A pin was clicked (its id), or empty map was clicked (null). */
   onSelectPin?: (id: string | null) => void
-  /** "Drop a pin" mode: map clicks call onPick instead of selecting games. */
+  /** A click on empty map (no game pin there), outside pick mode. */
+  onMapClick?: (at: { lat: number; lng: number }) => void
+  /** Location-picking mode: map clicks call onPick instead of selecting games. */
   pickMode?: boolean
   onPick?: (at: { lat: number; lng: number }) => void
   /** The location chosen for a new game, shown as an orange pin. */
@@ -81,6 +83,7 @@ export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function Pi
     pins = [],
     selectedId,
     onSelectPin,
+    onMapClick,
     pickMode = false,
     onPick,
     draftPin = null,
@@ -97,8 +100,8 @@ export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function Pi
   onReadyRef.current = onReady
   const onSelectRef = useRef(onSelectPin)
   onSelectRef.current = onSelectPin
-  const pickRef = useRef({ pickMode, onPick })
-  pickRef.current = { pickMode, onPick }
+  const pickRef = useRef({ pickMode, onPick, onMapClick })
+  pickRef.current = { pickMode, onPick, onMapClick }
 
   useImperativeHandle(ref, () => ({
     flyTo(lat, lng, zoom) {
@@ -170,6 +173,7 @@ export const PickupMap = forwardRef<PickupMapHandle, PickupMapProps>(function Pi
         const hit = map.queryRenderedFeatures(e.point, { layers: [PINS_LAYER] })[0]
         const id = hit?.properties?.id
         onSelectRef.current?.(typeof id === 'string' ? id : null)
+        if (typeof id !== 'string') pickRef.current.onMapClick?.({ lat: e.lngLat.lat, lng: e.lngLat.lng })
       })
       map.on('mouseenter', PINS_LAYER, () => {
         if (!pickRef.current.pickMode) map.getCanvas().style.cursor = 'pointer'
